@@ -1,9 +1,9 @@
 const { PrismaClient } = require('../generated/prisma');
-const { hashPassword } = require('../services/auth.service');
+const { hashPassword, verifyPassword } = require('../services/auth.service');
 
 const prisma = new PrismaClient();
 
-async function register(req, res) {
+async function register (req, res) {
   try {
     const { email, password, name } = req.body;
 
@@ -29,6 +29,38 @@ async function register(req, res) {
   }
 }
 
+async function login (req, res) {
+  try {
+    const { email, password } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const valid = await verifyPassword(password, user.passwordHash);
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      createdAt: user.createdAt
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+}
+
 module.exports = {
   register,
+  login
 };
