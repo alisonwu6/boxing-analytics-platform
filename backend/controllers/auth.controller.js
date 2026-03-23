@@ -1,5 +1,6 @@
 const { PrismaClient } = require('../generated/prisma');
 const { hashPassword, verifyPassword } = require('../services/auth.service');
+const { signToken } = require('../utils/jwt');
 
 const prisma = new PrismaClient();
 
@@ -47,11 +48,16 @@ async function login (req, res) {
       return res.status(401).json({ error: 'Invalid password' });
     }
 
+    const token = signToken(user);
+
     res.json({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      createdAt: user.createdAt
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.createdAt
+      }
     });
 
   } catch (error) {
