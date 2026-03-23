@@ -1,7 +1,7 @@
-import UploadPage from "./pages/UploadPage";
+import InsightsPage from "./pages/InsightsPage";
 
 function App() {
-  return <UploadPage />;
+  return <InsightsPage />;
 }
 
 export default App;

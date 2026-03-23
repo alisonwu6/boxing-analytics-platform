@@ -7,7 +7,7 @@ function HomePage() {
       icon: Upload,
     },
     {
-      title: "View Data",
+      title: "Insights",
       icon: Eye,
     },
     {
