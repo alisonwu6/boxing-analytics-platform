@@ -1,5 +1,7 @@
 const app = require('./app');
 const pool = require('./db/pool');
+const { PrismaClient } = require('./generated/prisma')
+const prisma = new PrismaClient()
 
 const port = process.env.PORT || 3001;
 
@@ -19,6 +21,21 @@ async function startServer() {
 
 startServer();
 
+// async function testDB() {
+//   const user = await prisma.user.create({
+//     data: {
+//       email: "test@example.com",
+//       password: "123456",
+//       name: "test"
+//     }
+//   })
+
+//   console.log("User created:", user)
+// }
+
+// testDB()
+
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
+
