@@ -1,4 +1,4 @@
-import { Activity, Upload, Eye, Download, Bluetooth, Home, Layers3, ClipboardCheck } from "lucide-react";
+import { Activity, Upload, Eye, Download, Home, Layers3, ClipboardCheck } from "lucide-react";
 
 function HomePage() {
   const actions = [
@@ -71,7 +71,7 @@ function HomePage() {
             </button>
 
             <button className="rounded-full p-2 text-black transition hover:bg-neutral-100">
-              <Bluetooth size={24} />
+              <Upload size={24} />
             </button>
 
             <button className="flex h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-md">
