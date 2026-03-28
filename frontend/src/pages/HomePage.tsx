@@ -1,18 +1,30 @@
-import { Activity, Upload, Eye, Download, Home, Layers3, ClipboardCheck } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  Activity,
+  Upload,
+  Eye,
+  Download,
+  Home,
+  Layers3,
+  ClipboardCheck,
+} from "lucide-react";
 
 function HomePage() {
   const actions = [
     {
       title: "Upload Data",
       icon: Upload,
+      path: "/upload",
     },
     {
       title: "Insights",
       icon: Eye,
+      path: "/insights",
     },
     {
       title: "Export Data",
       icon: Download,
+      path: "/reports",
     },
   ];
 
@@ -44,8 +56,9 @@ function HomePage() {
                 const Icon = action.icon;
 
                 return (
-                  <button
+                  <Link
                     key={action.title}
+                    to={action.path}
                     className="flex min-h-[120px] items-center gap-5 rounded-3xl bg-[#1697f6] px-6 py-6 text-left text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:translate-y-[-1px] hover:shadow-[0_10px_22px_rgba(0,0,0,0.18)]"
                   >
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10">
@@ -57,7 +70,7 @@ function HomePage() {
                         {action.title}
                       </p>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -66,25 +79,40 @@ function HomePage() {
 
         <nav className="mt-8 rounded-3xl bg-white px-6 py-4 shadow-[0_6px_24px_rgba(0,0,0,0.08)]">
           <div className="flex items-center justify-between text-black">
-            <button className="rounded-full p-2 text-black transition hover:bg-neutral-100">
+            <Link
+              to="/insights"
+              className="rounded-full p-2 text-black transition hover:bg-neutral-100"
+            >
               <Activity size={24} />
-            </button>
+            </Link>
 
-            <button className="rounded-full p-2 text-black transition hover:bg-neutral-100">
+            <Link
+              to="/upload"
+              className="rounded-full p-2 text-black transition hover:bg-neutral-100"
+            >
               <Upload size={24} />
-            </button>
+            </Link>
 
-            <button className="flex h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-md">
+            <Link
+              to="/"
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-md"
+            >
               <Home size={24} />
-            </button>
+            </Link>
 
-            <button className="rounded-full p-2 text-black transition hover:bg-neutral-100">
+            <Link
+              to="/sessions"
+              className="rounded-full p-2 text-black transition hover:bg-neutral-100"
+            >
               <Layers3 size={24} />
-            </button>
+            </Link>
 
-            <button className="rounded-full p-2 text-black transition hover:bg-neutral-100">
+            <Link
+              to="/reports"
+              className="rounded-full p-2 text-black transition hover:bg-neutral-100"
+            >
               <ClipboardCheck size={24} />
-            </button>
+            </Link>
           </div>
         </nav>
       </div>
