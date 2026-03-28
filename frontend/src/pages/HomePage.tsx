@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import {
   Activity,
   Upload,
-  Eye,
   Download,
   Home,
   Layers3,
@@ -17,9 +16,9 @@ function HomePage() {
       path: "/upload",
     },
     {
-      title: "Insights",
-      icon: Eye,
-      path: "/insights",
+      title: "Sessions",
+      icon: Layers3,
+      path: "/sessions",
     },
     {
       title: "Export Data",
@@ -80,7 +79,7 @@ function HomePage() {
         <nav className="mt-8 rounded-3xl bg-white px-6 py-4 shadow-[0_6px_24px_rgba(0,0,0,0.08)]">
           <div className="flex items-center justify-between text-black">
             <Link
-              to="/insights"
+              to="/sessions"
               className="rounded-full p-2 text-black transition hover:bg-neutral-100"
             >
               <Activity size={24} />

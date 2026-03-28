@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
+  Home,
   Upload,
   FileText,
   Film,
@@ -8,9 +10,19 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+type UploadStatus =
+  | "Waiting for upload"
+  | "Uploading files"
+  | "Sending to backend"
+  | "Processing analysis"
+  | "Analysis complete";
+
 function UploadPage() {
+  const navigate = useNavigate();
+
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [movFile, setMovFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<UploadStatus>("Waiting for upload");
 
   const handleCsvChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -33,31 +45,61 @@ function UploadPage() {
   const clearAllFiles = () => {
     setCsvFile(null);
     setMovFile(null);
+    setStatus("Waiting for upload");
   };
 
-  const handleUpload = () => {
+  const handleConfirmUpload = async () => {
     if (!csvFile && !movFile) {
       alert("Please select at least one file to upload.");
       return;
     }
 
-    alert("Upload action ready. Backend connection will be added next.");
+    setStatus("Uploading files");
+
+    setTimeout(() => {
+      setStatus("Sending to backend");
+
+      setTimeout(() => {
+        setStatus("Processing analysis");
+
+        setTimeout(() => {
+          setStatus("Analysis complete");
+        }, 1200);
+      }, 1200);
+    }, 1200);
   };
+
+  const statusColor =
+    status === "Analysis complete"
+      ? "text-green-600"
+      : status === "Waiting for upload"
+      ? "text-neutral-500"
+      : "text-[#1697f6]";
 
   return (
     <div className="min-h-screen bg-[#f3f3f3] text-black">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 pb-8 pt-8">
-        <header className="flex items-center gap-3 pt-4">
-          <button className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100">
+        <header className="flex items-center justify-between pt-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100"
+          >
             <ArrowLeft size={22} />
           </button>
 
-          <div>
+          <div className="text-center">
             <h1 className="text-2xl font-bold tracking-wide">UPLOAD DATA</h1>
-            <p className="text-sm text-neutral-500">
-              Add CSV and MOV files for analysis
+            <p className="mt-1 text-sm text-neutral-500">
+              Upload CSV and MOV files for boxing analysis
             </p>
           </div>
+
+          <Link
+            to="/"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100"
+          >
+            <Home size={22} />
+          </Link>
         </header>
 
         <main className="mt-8 flex-1">
@@ -170,6 +212,22 @@ function UploadPage() {
                   </div>
                 )}
               </section>
+
+              <section className="rounded-3xl bg-[#f8f8f8] p-5">
+                <h2 className="text-lg font-semibold">Analysis Status</h2>
+                <p className={`mt-3 text-sm font-medium ${statusColor}`}>
+                  {status}
+                </p>
+
+                {status === "Analysis complete" && (
+                  <Link
+                    to="/sessions"
+                    className="mt-5 inline-flex rounded-2xl bg-[#1697f6] px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95"
+                  >
+                    Go to Sessions
+                  </Link>
+                )}
+              </section>
             </div>
           </div>
         </main>
@@ -183,10 +241,10 @@ function UploadPage() {
           </button>
 
           <button
-            onClick={handleUpload}
+            onClick={handleConfirmUpload}
             className="flex-1 rounded-2xl bg-[#1697f6] px-4 py-4 text-base font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95"
           >
-            Upload
+            Confirm Upload
           </button>
         </footer>
       </div>
