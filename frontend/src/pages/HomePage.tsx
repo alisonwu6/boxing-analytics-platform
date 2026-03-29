@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import {
-  Activity,
+  User,
   Upload,
   Download,
   Home,
@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 
 function HomePage() {
+  const token = localStorage.getItem("token");
+  const isLoggedIn = Boolean(token);
+
   const actions = [
     {
       title: "Upload Data",
@@ -30,20 +33,33 @@ function HomePage() {
   return (
     <div className="min-h-screen bg-[#f3f3f3] text-black">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 pb-8 pt-8">
-        <header className="flex flex-col items-center pt-6">
-          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full">
-            <img
-              src="/logo-placeholder.svg"
-              alt="Kivo Motion logo"
-              className="h-14 w-14 object-contain"
-            />
+        <header className="pt-6">
+          <div className="mb-4 flex items-start justify-between">
+            <div className="w-20" />
+
+            <div className="flex h-16 w-16 items-center justify-center rounded-full">
+              <img
+                src="/logo-placeholder.svg"
+                alt="Kivo Motion logo"
+                className="h-14 w-14 object-contain"
+              />
+            </div>
+
+            <div className="flex w-20 justify-end">
+              <Link
+                to={isLoggedIn ? "/profile" : "/login"}
+                className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black shadow-sm transition hover:bg-neutral-100"
+              >
+                {isLoggedIn ? "Profile" : "Login"}
+              </Link>
+            </div>
           </div>
 
           <h1 className="text-center text-3xl font-bold tracking-wide">
             DATA MANAGEMENT
           </h1>
 
-          <p className="mt-3 max-w-xs text-center text-sm text-neutral-500">
+          <p className="mx-auto mt-3 max-w-xs text-center text-sm text-neutral-500">
             Manage boxing session data and analysis files
           </p>
         </header>
@@ -79,10 +95,10 @@ function HomePage() {
         <nav className="mt-8 rounded-3xl bg-white px-6 py-4 shadow-[0_6px_24px_rgba(0,0,0,0.08)]">
           <div className="flex items-center justify-between text-black">
             <Link
-              to="/sessions"
+              to="/profile"
               className="rounded-full p-2 text-black transition hover:bg-neutral-100"
             >
-              <Activity size={24} />
+              <User size={24} />
             </Link>
 
             <Link
