@@ -1,25 +1,17 @@
-const { PrismaClient } = require('../generated/prisma');
+const sessionsService = require('./sessions.service');
 
-const prisma = new PrismaClient();
-
-async function createUploadSession(userId) {
-  return prisma.uploadSession.create({
-    data: {
-      userId,
-    },
-  });
+async function createUploadSession(userId, input = {}) {
+  return sessionsService.createUploadSession(userId, input);
 }
 
 async function getUploadSessionById(id) {
-  return prisma.uploadSession.findUnique({
-    where: { id },
-  });
+  return sessionsService.getSessionById(id);
 }
 
-async function updateUploadSession(id, data) {
-  return prisma.uploadSession.update({
-    where: { id },
-    data,
+async function updateUploadSession(id, filesOrPatch) {
+  return sessionsService.attachFilesToSession(id, {
+    csvFile: filesOrPatch.csvFile || null,
+    movFile: filesOrPatch.movFile || null,
   });
 }
 

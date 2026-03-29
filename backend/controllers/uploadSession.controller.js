@@ -4,12 +4,12 @@ async function create(req, res) {
   try {
     const userId = req.userId;
 
-    const uploadSession = await createUploadSession(userId);
+    const uploadSession = await createUploadSession(userId, req.body);
 
     res.status(201).json(uploadSession);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to create upload session' });
+    res.status(error.status || 500).json({ error: error.message || 'Failed to create upload session' });
   }
 }
 

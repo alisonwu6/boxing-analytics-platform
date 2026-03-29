@@ -1,40 +1,40 @@
 const { updateUploadSession } = require('../services/uploadSession.service');
+const { createUploadSession } = require('../services/uploadSession.service');
 
 async function uploadFiles(req, res) {
   try {
-    const { uploadSessionId } = req.body;
+    const uploadSessionId = req.body?.uploadSessionId;
+    const csvFile = req.files?.csvFile?.[0] || null;
+    const movFile = req.files?.movFile?.[0] || null;
 
-    if (!uploadSessionId) {
+    if (!csvFile && !movFile) {
       return res.status(400).json({
-        error: 'uploadSessionId is required',
+        error: 'At least one CSV or MOV file is required',
       });
     }
 
-    const csv = req.files.csvFile?.[0];
-    const mov = req.files.movFile?.[0];
+    let sessionId = uploadSessionId;
+    let created = false;
 
-    const updateData = {};
-
-    if (csv) {
-      updateData.csvFilePath = csv.path;
-      updateData.csvUploadStatus = 'uploaded';
+    if (!sessionId) {
+      const uploadSession = await createUploadSession(req.userId, req.body);
+      sessionId = uploadSession.id;
+      created = true;
     }
 
-    if (mov) {
-      updateData.movFilePath = mov.path;
-      updateData.movUploadStatus = 'uploaded';
-    }
+    const session = await updateUploadSession(sessionId, {
+      csvFile,
+      movFile,
+    });
 
-    const session = await updateUploadSession(uploadSessionId, updateData);
-
-    res.json({
+    res.status(created ? 201 : 200).json({
       message: 'Files uploaded and session updated',
       session,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: 'Upload failed',
+    res.status(error.status || 500).json({
+      error: error.message || 'Upload failed',
     });
   }
 }
