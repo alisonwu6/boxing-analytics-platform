@@ -1,6 +1,5 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { fixtureSessions } = require('./sessions.fixtures');
 
 const dataDirectory = path.join(__dirname, '..', 'data');
 const sessionsFilePath = path.join(dataDirectory, 'sessions.json');
@@ -21,17 +20,9 @@ async function readSessions() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [...fixtureSessions];
-    }
-
-    if (parsed.length === 0) {
-      return [...fixtureSessions];
-    }
-
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [...fixtureSessions];
+    return [];
   }
 }
 

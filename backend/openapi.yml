@@ -2,86 +2,937 @@ openapi: 3.0.0
 info:
   title: Boxing Analytics Platform API
   version: 1.0.0
-  description: API documentation for the Boxing Analytics Platform
+  description: |
+    API for the boxing analytics platform.
+
+    Current local flow:
+    1. User registers or logs in
+    2. User uploads IMU CSV and/or MOV video for one session
+    3. ML worker picks up the session and runs preprocessing and inference
+    4. ML worker sends status updates or prediction results back to the backend
+    5. Frontend reads saved sessions and session details
+
 servers:
   - url: http://localhost:3001
     description: Development server
+
+tags:
+  - name: Auth
+    description: Register, login, and get current user
+  - name: Sessions
+    description: Upload and read session data
+  - name: ML Internal
+    description: Internal endpoints for ML workers
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: Failed to upload session files
+
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9e5e6d48-d6de-46af-b3d6-6d5f54d6de72
+        email:
+          type: string
+          format: email
+          example: boxer@example.com
+        name:
+          type: string
+          example: Alison Wu
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:03:55.300Z
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+          example: boxer@example.com
+        password:
+          type: string
+          format: password
+          example: secret123
+        name:
+          type: string
+          example: Alison Wu
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: boxer@example.com
+        password:
+          type: string
+          format: password
+          example: secret123
+
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: '#/components/schemas/User'
+
+    UploadFileStatus:
+      type: string
+      description: Upload state for one source file.
+      enum: [missing, uploaded, failed]
+      example: uploaded
+
+    Session:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - notes
+        - sessionDate
+        - sessionStartAt
+        - sessionEndAt
+        - date
+        - type
+        - startTime
+        - endTime
+        - csvAvailable
+        - csvUploadStatus
+        - movAvailable
+        - movUploadStatus
+        - status
+        - processingStatus
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        userId:
+          type: string
+          example: anonymous
+        title:
+          type: string
+          example: Morning Sparring Session
+        notes:
+          type: string
+          example: Front-end contract check
+        sessionDate:
+          type: string
+          format: date-time
+          description: Session date used for grouping and calendar display
+          example: 2026-03-29T13:03:55.300Z
+        sessionStartAt:
+          type: string
+          format: date-time
+          description: Raw session start timestamp before formatting
+          example: 2026-03-29T13:03:55.300Z
+        sessionEndAt:
+          type: string
+          format: date-time
+          description: Raw session end timestamp before formatting
+          example: 2026-03-29T14:03:55.300Z
+        date:
+          type: string
+          description: Convenience field for calendar-based UI grouping
+          example: '2026-03-29'
+        type:
+          type: string
+          enum: [training, match]
+          example: training
+        startTime:
+          type: string
+          description: Formatted session start time for UI display
+          example: 11:03 pm
+        endTime:
+          type: string
+          description: Formatted session end time for UI display
+          example: 11:03 pm
+        csvAvailable:
+          type: boolean
+          description: True if a CSV file exists for this session
+          example: true
+        csvUploadStatus:
+          allOf:
+            - $ref: '#/components/schemas/UploadFileStatus'
+          description: Current upload state for the CSV file.
+        movAvailable:
+          type: boolean
+          description: True if a MOV file exists for this session
+          example: true
+        movUploadStatus:
+          allOf:
+            - $ref: '#/components/schemas/UploadFileStatus'
+          description: Current upload state for the MOV file.
+        status:
+          type: string
+          enum: [uploaded, processing, completed, failed]
+          example: uploaded
+        processingStatus:
+          type: string
+          description: Analysis job state. `uploaded` means files are ready but analysis has not started yet.
+          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
+          example: uploaded
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:03:55.300Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:03:55.353Z
+
+    SessionSummary:
+      type: object
+      required:
+        - id
+        - title
+        - date
+        - type
+        - startTime
+        - endTime
+        - csvAvailable
+        - csvUploadStatus
+        - movAvailable
+        - movUploadStatus
+        - status
+        - processingStatus
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        title:
+          type: string
+          example: Boxing Session Upload
+        date:
+          type: string
+          example: '2026-03-30'
+        type:
+          type: string
+          enum: [training, match]
+          example: training
+        startTime:
+          type: string
+          description: Formatted session start time for UI display
+          example: 1:39am
+        endTime:
+          type: string
+          description: Formatted session end time for UI display
+          example: 1:39am
+        csvAvailable:
+          type: boolean
+          description: True if a CSV file exists for this session
+          example: true
+        csvUploadStatus:
+          allOf:
+            - $ref: '#/components/schemas/UploadFileStatus'
+          description: Current upload state for the CSV file.
+        movAvailable:
+          type: boolean
+          description: True if a MOV file exists for this session
+          example: true
+        movUploadStatus:
+          allOf:
+            - $ref: '#/components/schemas/UploadFileStatus'
+          description: Current upload state for the MOV file.
+        status:
+          type: string
+          enum: [uploaded, processing, completed, failed]
+          example: uploaded
+        processingStatus:
+          type: string
+          description: Analysis job state for this session.
+          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
+          example: uploaded
+
+    UploadSessionRequest:
+      type: object
+      properties:
+        csvFile:
+          type: string
+          format: binary
+        movFile:
+          type: string
+          format: binary
+        title:
+          type: string
+          example: Morning Sparring Session
+        notes:
+          type: string
+          example: Wrist IMU plus reference video
+        sessionType:
+          type: string
+          enum: [training, match]
+          example: training
+        sessionDate:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:03:55.300Z
+        sessionStartAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:03:55.300Z
+        sessionEndAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T14:03:55.300Z
+
+    UploadSessionResponse:
+      type: object
+      required:
+        - message
+        - session
+      properties:
+        message:
+          type: string
+          example: Files uploaded successfully
+        session:
+          $ref: '#/components/schemas/SessionSummary'
+
+    AnalyzeSessionResponse:
+      type: object
+      required:
+        - message
+        - sessionId
+        - status
+        - processingStatus
+      properties:
+        message:
+          type: string
+          example: Session analysis started
+        sessionId:
+          type: string
+          format: uuid
+          example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        status:
+          type: string
+          enum: [uploaded, processing, completed, failed]
+          example: processing
+        processingStatus:
+          type: string
+          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
+          example: queued
+
+    SessionStatusResponse:
+      type: object
+      required:
+        - sessionId
+        - status
+        - processingStatus
+        - canFetchResults
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        status:
+          type: string
+          enum: [uploaded, processing, completed, failed]
+          example: processing
+        processingStatus:
+          type: string
+          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
+          example: queued
+        modelVersion:
+          type: string
+          nullable: true
+          example: imu-punch-v1.2.0
+        errorMessage:
+          type: string
+          nullable: true
+          example: null
+        processingStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: 2026-03-29T13:10:00.000Z
+        processingFinishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        canFetchResults:
+          type: boolean
+          example: false
+
+    SessionStatusUpdateRequest:
+      type: object
+      required:
+        - processingStatus
+      properties:
+        processingStatus:
+          type: string
+          description: Current ML processing state. Use `uploaded` before the analysis job starts.
+          enum:
+            - uploaded
+            - queued
+            - preprocessing
+            - inferencing
+            - completed
+            - failed
+          example: preprocessing
+        status:
+          type: string
+          description: Session status used by the app UI
+          enum: [uploaded, processing, completed, failed]
+          example: processing
+        errorMessage:
+          type: string
+          nullable: true
+          example: null
+        modelVersion:
+          type: string
+          example: imu-punch-v1.2.0
+        processingStartedAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:10:00.000Z
+        processingFinishedAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:10:12.000Z
+
+    SessionStatusUpdateResponse:
+      type: object
+      required:
+        - message
+        - sessionId
+        - processingStatus
+      properties:
+        message:
+          type: string
+          example: Session status updated
+        sessionId:
+          type: string
+          format: uuid
+          example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        processingStatus:
+          type: string
+          example: preprocessing
+        status:
+          type: string
+          example: processing
+        errorMessage:
+          type: string
+          nullable: true
+          example: null
+        modelVersion:
+          type: string
+          nullable: true
+          example: imu-punch-v1.2.0
+        processingStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: 2026-03-29T13:10:00.000Z
+        processingFinishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        canFetchResults:
+          type: boolean
+          example: false
+
+    SessionResultsUpsertRequest:
+      type: object
+      description: Placeholder schema. ML result payload will be finalized later.
+      additionalProperties: true
+
+    SessionResultsUpsertResponse:
+      type: object
+      description: Placeholder schema. ML result response will be finalized later.
+      additionalProperties: true
+
+    SessionResultsPayload:
+      type: object
+      description: Placeholder schema. Session result fields will be confirmed later.
+      additionalProperties: true
+
+  responses:
+    UnauthorizedError:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Authentication required
+    NotFoundError:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Session not found
+    InternalServerError:
+      description: Unexpected server-side failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Failed to load sessions
+
 security:
   - bearerAuth: []
+
 paths:
   /auth/register:
     post:
-      summary: Register a new user
       tags:
         - Auth
+      summary: Register a new user
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - email
-                - password
-                - name
-              properties:
-                email:
-                  type: string
-                password:
-                  type: string
-                name:
-                  type: string
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: boxer@example.com
+              password: secret123
+              name: Alison Wu
       responses:
         '201':
           description: User registered successfully
-        '400':
-          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '500':
+          description: Failed to register user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to register user
+
   /auth/login:
     post:
-      summary: Login user
       tags:
         - Auth
+      summary: Login user
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                password:
-                  type: string
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: boxer@example.com
+              password: secret123
       responses:
         '200':
           description: Login successful
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  token:
-                    type: string
-        '400':
-          description: Invalid credentials
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: User not found or password invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  value:
+                    error: User not found
+                invalidPassword:
+                  value:
+                    error: Invalid password
+        '500':
+          description: Login failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Login failed
+
   /auth/me:
     get:
-      summary: Get current authenticated user
       tags:
         - Auth
+      summary: Get current authenticated user
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Current user info
+          description: Current authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         '401':
-          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: User not found
+        '500':
+          description: Failed to get user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to get user
+
+  /sessions:
+    get:
+      tags:
+        - Sessions
+      summary: List uploaded boxing sessions
+      description: Returns saved sessions.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionSummary'
+        '500':
+          description: Failed to load sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to load sessions
+
+  /sessions/{id}:
+    get:
+      tags:
+        - Sessions
+      summary: Get session detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Session not found
+        '500':
+          description: Failed to load session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to load session
+
+  /sessions/upload:
+    post:
+      tags:
+        - Sessions
+      summary: Upload CSV and MOV files and create a boxing session
+      description: |
+        Accepts multipart form-data.
+        Either csvFile or movFile is required.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadSessionRequest'
+      responses:
+        '201':
+          description: Files uploaded and session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSessionResponse'
+        '400':
+          description: Invalid upload payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noFiles:
+                  value:
+                    error: At least one CSV or MOV file is required
+                badCsvExtension:
+                  value:
+                    error: csvFile must be a .csv file
+                badMovExtension:
+                  value:
+                    error: movFile must be a .mov file
+        '500':
+          description: Failed to upload session files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to upload session files
+
+  /sessions/{id}/analyze:
+    post:
+      tags:
+        - Sessions
+      summary: Start analysis for a session
+      description: |
+        Call this after the user clicks Analyze Session.
+        The backend marks the session as queued so the UI can start polling status.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Session analysis started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeSessionResponse'
+        '400':
+          description: Session cannot be analyzed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Session has no uploaded files
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          description: Failed to start session analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to start session analysis
+
+  /sessions/{id}/status:
+    get:
+      tags:
+        - Sessions
+      summary: Get session processing status
+      description: |
+        Poll this endpoint after the user clicks Analyze Session.
+        Keep polling until status becomes completed or failed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current session status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatusResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          description: Failed to load session status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to load session status
+
+  /sessions/{id}/results:
+    get:
+      tags:
+        - Sessions
+      summary: Get completed session results
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Completed session results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResultsPayload'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: Session results are not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Session results are not ready
+        '500':
+          description: Failed to load session results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to load session results
+
+  /ml/sessions/{id}/status:
+    patch:
+      tags:
+        - ML Internal
+      summary: Update ML processing status for a session
+      description: Internal callback used by ML workers.
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionStatusUpdateRequest'
+      responses:
+        '200':
+          description: Session status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatusUpdateResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          description: Failed to update session status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to update session status
+
+  /ml/sessions/{id}/results:
+    post:
+      tags:
+        - ML Internal
+      summary: Submit prediction results for a session
+      description: Internal callback used by ML workers.
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionResultsUpsertRequest'
+      responses:
+        '200':
+          description: Session results recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResultsUpsertResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          description: Failed to record session results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to record session results

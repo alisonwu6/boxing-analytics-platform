@@ -9,7 +9,7 @@ function handleControllerError(res, error, fallbackMessage) {
 
 async function getSessions(req, res) {
   try {
-    const sessions = await sessionsService.getSessions();
+    const sessions = await sessionsService.getSessions({ userId: req.userId });
     res.json(sessions);
   } catch (error) {
     handleControllerError(res, error, 'Failed to load sessions');
@@ -18,10 +18,55 @@ async function getSessions(req, res) {
 
 async function getSessionById(req, res) {
   try {
-    const session = await sessionsService.getSessionById(req.params.id);
+    const session = await sessionsService.getSessionById(req.params.id, req.userId);
     res.json(session);
   } catch (error) {
     handleControllerError(res, error, 'Failed to load session');
+  }
+}
+
+async function getSessionStatus(req, res) {
+  try {
+    const status = await sessionsService.getSessionStatus(req.params.id, req.userId);
+    res.json(status);
+  } catch (error) {
+    handleControllerError(res, error, 'Failed to load session status');
+  }
+}
+
+async function startSessionAnalysis(req, res) {
+  try {
+    const payload = await sessionsService.startSessionAnalysis(req.params.id, req.userId);
+    res.status(202).json(payload);
+  } catch (error) {
+    handleControllerError(res, error, 'Failed to start session analysis');
+  }
+}
+
+async function updateSessionStatus(req, res) {
+  try {
+    const payload = await sessionsService.updateSessionStatus(req.params.id, req.body);
+    res.json(payload);
+  } catch (error) {
+    handleControllerError(res, error, 'Failed to update session status');
+  }
+}
+
+async function getSessionResults(req, res) {
+  try {
+    const results = await sessionsService.getSessionResults(req.params.id, req.userId);
+    res.json(results);
+  } catch (error) {
+    handleControllerError(res, error, 'Failed to load session results');
+  }
+}
+
+async function saveSessionResults(req, res) {
+  try {
+    const payload = await sessionsService.saveSessionResults(req.params.id, req.body);
+    res.json(payload);
+  } catch (error) {
+    handleControllerError(res, error, 'Failed to record session results');
   }
 }
 
@@ -44,7 +89,7 @@ async function uploadSessionFiles(req, res) {
 
     res.status(201).json({
       message: 'Files uploaded successfully',
-      session: updatedSession,
+      session: sessionsService.serialiseSessionSummary(updatedSession),
     });
   } catch (error) {
     handleControllerError(res, error, 'Failed to upload session files');
@@ -54,5 +99,10 @@ async function uploadSessionFiles(req, res) {
 module.exports = {
   getSessions,
   getSessionById,
+  getSessionStatus,
+  startSessionAnalysis,
+  updateSessionStatus,
+  getSessionResults,
+  saveSessionResults,
   uploadSessionFiles,
 };
