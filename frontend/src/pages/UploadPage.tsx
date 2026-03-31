@@ -9,13 +9,13 @@ import {
   X,
   CheckCircle2,
 } from "lucide-react";
+import { uploadSessionFiles } from "../services/sessions";
 
 type UploadStatus =
   | "Waiting for upload"
   | "Uploading files"
-  | "Sending to backend"
-  | "Processing analysis"
-  | "Analysis complete";
+  | "Upload complete"
+  | "Upload failed";
 
 function UploadPage() {
   const navigate = useNavigate();
@@ -23,6 +23,7 @@ function UploadPage() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [movFile, setMovFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>("Waiting for upload");
+  const [loading, setLoading] = useState(false);
 
   const handleCsvChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -54,27 +55,34 @@ function UploadPage() {
       return;
     }
 
-    setStatus("Uploading files");
+    try {
+      setLoading(true);
+      setStatus("Uploading files");
 
-    setTimeout(() => {
-      setStatus("Sending to backend");
+      await uploadSessionFiles(csvFile, movFile);
+
+      setStatus("Upload complete");
 
       setTimeout(() => {
-        setStatus("Processing analysis");
-
-        setTimeout(() => {
-          setStatus("Analysis complete");
-        }, 1200);
-      }, 1200);
-    }, 1200);
+        navigate("/sessions");
+      }, 800);
+    } catch (error: any) {
+      console.error(error);
+      setStatus("Upload failed");
+      alert(error?.response?.data?.message || "Upload failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const statusColor =
-    status === "Analysis complete"
+    status === "Upload complete"
       ? "text-green-600"
-      : status === "Waiting for upload"
-      ? "text-neutral-500"
-      : "text-[#1697f6]";
+      : status === "Upload failed"
+      ? "text-red-600"
+      : status === "Uploading files"
+      ? "text-[#1697f6]"
+      : "text-neutral-500";
 
   return (
     <div className="min-h-screen bg-[#f3f3f3] text-black">
@@ -95,7 +103,7 @@ function UploadPage() {
           </div>
 
           <Link
-            to="/"
+            to="/home"
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100"
           >
             <Home size={22} />
@@ -142,9 +150,7 @@ function UploadPage() {
                         className="shrink-0 text-green-500"
                       />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {csvFile.name}
-                        </p>
+                        <p className="truncate text-sm font-medium">{csvFile.name}</p>
                         <p className="text-xs text-neutral-500">CSV selected</p>
                       </div>
                     </div>
@@ -196,9 +202,7 @@ function UploadPage() {
                         className="shrink-0 text-green-500"
                       />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {movFile.name}
-                        </p>
+                        <p className="truncate text-sm font-medium">{movFile.name}</p>
                         <p className="text-xs text-neutral-500">MOV selected</p>
                       </div>
                     </div>
@@ -214,12 +218,12 @@ function UploadPage() {
               </section>
 
               <section className="rounded-3xl bg-[#f8f8f8] p-5">
-                <h2 className="text-lg font-semibold">Analysis Status</h2>
+                <h2 className="text-lg font-semibold">Upload Status</h2>
                 <p className={`mt-3 text-sm font-medium ${statusColor}`}>
                   {status}
                 </p>
 
-                {status === "Analysis complete" && (
+                {status === "Upload complete" && (
                   <Link
                     to="/sessions"
                     className="mt-5 inline-flex rounded-2xl bg-[#1697f6] px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95"
@@ -235,16 +239,18 @@ function UploadPage() {
         <footer className="mt-6 flex gap-3">
           <button
             onClick={clearAllFiles}
-            className="flex-1 rounded-2xl bg-white px-4 py-4 text-base font-semibold text-black shadow-sm transition hover:bg-neutral-100"
+            disabled={loading}
+            className="flex-1 rounded-2xl bg-white px-4 py-4 text-base font-semibold text-black shadow-sm transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Clear
           </button>
 
           <button
             onClick={handleConfirmUpload}
-            className="flex-1 rounded-2xl bg-[#1697f6] px-4 py-4 text-base font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95"
+            disabled={loading}
+            className="flex-1 rounded-2xl bg-[#1697f6] px-4 py-4 text-base font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Confirm Upload
+            {loading ? "Uploading..." : "Confirm Upload"}
           </button>
         </footer>
       </div>

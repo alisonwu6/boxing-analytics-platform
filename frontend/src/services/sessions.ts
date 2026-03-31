@@ -20,15 +20,23 @@ export async function fetchSessionStatus(id: string) {
   return response.data;
 }
 
-export async function uploadSessionFiles(csvFile?: File | null, movFile?: File | null) {
+export async function fetchSessionResults(id: string) {
+  const response = await api.get(`/sessions/${id}/results`);
+  return response.data;
+}
+
+export async function uploadSessionFiles(
+  csvFile?: File | null,
+  movFile?: File | null
+) {
   const formData = new FormData();
 
   if (csvFile) {
-    formData.append("csv", csvFile);
+    formData.append("csvFile", csvFile);
   }
 
   if (movFile) {
-    formData.append("mov", movFile);
+    formData.append("movFile", movFile);
   }
 
   const response = await api.post("/sessions/upload", formData, {
