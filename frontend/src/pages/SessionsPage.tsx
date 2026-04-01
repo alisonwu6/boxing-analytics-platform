@@ -15,11 +15,23 @@ import { fetchSessions, analyzeSession } from "../services/sessions";
 
 type SessionRecord = {
   id: string;
-  user_id?: string;
-  title?: string;
-  session_date?: string;
-  notes?: string;
-  created_at?: string;
+  title: string;
+  date: string;
+  type: "training" | "match";
+  startTime: string;
+  endTime: string;
+  csvAvailable: boolean;
+  csvUploadStatus: "missing" | "uploaded" | "failed";
+  movAvailable: boolean;
+  movUploadStatus: "missing" | "uploaded" | "failed";
+  status: "uploaded" | "processing" | "completed" | "failed";
+  processingStatus:
+    | "uploaded"
+    | "queued"
+    | "preprocessing"
+    | "inferencing"
+    | "completed"
+    | "failed";
 };
 
 function formatMonthYear(year: number, monthIndex: number) {
@@ -88,26 +100,24 @@ function SessionsPage() {
       try {
         setLoading(true);
         setErrorMessage("");
+
         const data = await fetchSessions();
         console.log("sessions data:", data);
 
-        
-
-        
         const validSessions = (data || []).filter(
-          (item: SessionRecord) => item.id && item.session_date
+          (item: SessionRecord) => item.id && item.date
         );
 
         setSessions(validSessions);
 
         if (validSessions.length > 0) {
           const sortedSessions = [...validSessions].sort((a, b) => {
-            const dateA = new Date(`${a.session_date}T00:00:00`).getTime();
-            const dateB = new Date(`${b.session_date}T00:00:00`).getTime();
+            const dateA = new Date(`${a.date}T00:00:00`).getTime();
+            const dateB = new Date(`${b.date}T00:00:00`).getTime();
             return dateB - dateA;
           });
 
-          const latestDate = sortedSessions[0].session_date as string;
+          const latestDate = sortedSessions[0].date;
           const latest = new Date(`${latestDate}T00:00:00`);
 
           setSelectedDate(latestDate);
@@ -131,8 +141,7 @@ function SessionsPage() {
 
   const sessionsInCurrentMonth = useMemo(() => {
     return sessions.filter((session) => {
-      if (!session.session_date) return false;
-      const date = new Date(`${session.session_date}T00:00:00`);
+      const date = new Date(`${session.date}T00:00:00`);
       return (
         date.getFullYear() === currentYear &&
         date.getMonth() === currentMonth
@@ -143,15 +152,13 @@ function SessionsPage() {
   const sessionDays = useMemo(() => {
     const set = new Set<number>();
     sessionsInCurrentMonth.forEach((session) => {
-      if (session.session_date) {
-        set.add(new Date(`${session.session_date}T00:00:00`).getDate());
-      }
+      set.add(new Date(`${session.date}T00:00:00`).getDate());
     });
     return set;
   }, [sessionsInCurrentMonth]);
 
   const sessionsForSelectedDate = useMemo(() => {
-    return sessions.filter((session) => session.session_date === selectedDate);
+    return sessions.filter((session) => session.date === selectedDate);
   }, [sessions, selectedDate]);
 
   const goPrevMonth = () => {
@@ -193,6 +200,23 @@ function SessionsPage() {
     } finally {
       setAnalyzingId(null);
     }
+  };
+
+  const getSessionBadge = (session: SessionRecord) => {
+    if (session.processingStatus === "completed") {
+      return "bg-green-100 text-green-700";
+    }
+    if (
+      session.processingStatus === "queued" ||
+      session.processingStatus === "preprocessing" ||
+      session.processingStatus === "inferencing"
+    ) {
+      return "bg-yellow-100 text-yellow-700";
+    }
+    if (session.processingStatus === "failed") {
+      return "bg-red-100 text-red-700";
+    }
+    return "bg-blue-100 text-blue-700";
   };
 
   return (
@@ -302,11 +326,7 @@ function SessionsPage() {
 
                             {hasSession && (
                               <div className="absolute bottom-0 flex items-center gap-1">
-                                <Circle
-                                  size={7}
-                                  fill="#2F5FD0"
-                                  stroke="#2F5FD0"
-                                />
+                                <Circle size={7} fill="#2F5FD0" stroke="#2F5FD0" />
                               </div>
                             )}
                           </button>
@@ -346,13 +366,27 @@ function SessionsPage() {
                         key={session.id}
                         className="rounded-2xl bg-[#f8f8f8] px-4 py-4"
                       >
-                        <p className="text-sm font-semibold text-[#1f1f1f]">
-                          {session.title || "Untitled Session"}
-                        </p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-[#1f1f1f]">
+                              {session.title || "Untitled Session"}
+                            </p>
+                            <p className="mt-1 text-xs text-neutral-500 capitalize">
+                              {session.type} · {session.startTime} - {session.endTime}
+                            </p>
+                            <p className="mt-1 text-xs text-neutral-500">
+                              CSV: {session.csvUploadStatus} · MOV: {session.movUploadStatus}
+                            </p>
+                          </div>
 
-                        <p className="mt-1 text-xs text-neutral-500">
-                          {session.notes || "No notes available"}
-                        </p>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${getSessionBadge(
+                              session
+                            )}`}
+                          >
+                            {session.processingStatus}
+                          </span>
+                        </div>
 
                         <button
                           onClick={() => handleAnalyzeSession(session.id)}
