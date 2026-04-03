@@ -7,10 +7,10 @@ info:
 
     Current local flow:
     1. User registers or logs in
-    2. User uploads IMU CSV and/or MOV video for one session
-    3. ML worker picks up the session and runs preprocessing and inference
-    4. ML worker sends status updates or prediction results back to the backend
-    5. Frontend reads saved sessions and session details
+    2. User creates an upload session and uploads IMU CSV and/or MOV video for one session
+    3. The backend records upload state and session metadata in the database
+    4. The backend starts local analysis for the uploaded session
+    5. Frontend reads saved sessions, progress, and results from the backend
 
 servers:
   - url: http://localhost:3001
@@ -20,9 +20,14 @@ tags:
   - name: Auth
     description: Register, login, and get current user
   - name: Sessions
-    description: Upload and read session data
-  - name: ML Internal
-    description: Internal endpoints for ML workers
+    description: |
+      Session workflow APIs.
+        1. Create an upload session
+        2. Request a presigned URL for each file to upload
+        3. Upload files directly to S3 with the presigned URLs
+        4. Mark uploads as completed in the backend
+        5. Start session analysis
+        6. Poll session status and fetch results when processing is complete
 
 components:
   securitySchemes:
@@ -130,9 +135,7 @@ components:
         - type
         - startTime
         - endTime
-        - csvAvailable
         - csvUploadStatus
-        - movAvailable
         - movUploadStatus
         - status
         - processingStatus
@@ -180,29 +183,22 @@ components:
           type: string
           description: Formatted session end time for UI display
           example: 11:03 pm
-        csvAvailable:
-          type: boolean
-          description: True if a CSV file exists for this session
-          example: true
         csvUploadStatus:
           allOf:
             - $ref: '#/components/schemas/UploadFileStatus'
           description: Current upload state for the CSV file.
-        movAvailable:
-          type: boolean
-          description: True if a MOV file exists for this session
-          example: true
         movUploadStatus:
           allOf:
             - $ref: '#/components/schemas/UploadFileStatus'
           description: Current upload state for the MOV file.
         status:
           type: string
-          enum: [uploaded, processing, completed, failed]
-          example: uploaded
+          description: Session lifecycle state. `draft` means the session exists but no file upload has completed yet. `ready` means at least one file upload has completed and analysis can be started.
+          enum: [draft, ready, processing, completed, failed]
+          example: draft
         processingStatus:
           type: string
-          description: Analysis job state. `uploaded` means files are ready but analysis has not started yet.
+          description: Analysis job state. `uploaded` means analysis has not started yet.
           enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
           example: uploaded
         createdAt:
@@ -223,9 +219,7 @@ components:
         - type
         - startTime
         - endTime
-        - csvAvailable
         - csvUploadStatus
-        - movAvailable
         - movUploadStatus
         - status
         - processingStatus
@@ -252,26 +246,18 @@ components:
           type: string
           description: Formatted session end time for UI display
           example: 1:39am
-        csvAvailable:
-          type: boolean
-          description: True if a CSV file exists for this session
-          example: true
         csvUploadStatus:
           allOf:
             - $ref: '#/components/schemas/UploadFileStatus'
           description: Current upload state for the CSV file.
-        movAvailable:
-          type: boolean
-          description: True if a MOV file exists for this session
-          example: true
         movUploadStatus:
           allOf:
             - $ref: '#/components/schemas/UploadFileStatus'
           description: Current upload state for the MOV file.
         status:
           type: string
-          enum: [uploaded, processing, completed, failed]
-          example: uploaded
+          enum: [draft, ready, processing, completed, failed]
+          example: draft
         processingStatus:
           type: string
           description: Analysis job state for this session.
@@ -342,6 +328,84 @@ components:
           format: date-time
           example: 2026-03-29T14:03:55.300Z
 
+    PresignUploadRequest:
+      type: object
+      required:
+        - fileType
+      properties:
+        fileType:
+          type: string
+          enum: [csv, mov]
+          example: csv
+        contentType:
+          type: string
+          example: text/csv
+        originalFileName:
+          type: string
+          example: imu.csv
+
+    PresignUploadResponse:
+      type: object
+      required:
+        - uploadSessionId
+        - fileType
+        - bucket
+        - key
+        - uploadUrl
+        - expiresIn
+        - region
+      properties:
+        uploadSessionId:
+          type: string
+          format: uuid
+          example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        fileType:
+          type: string
+          enum: [csv, mov]
+          example: csv
+        bucket:
+          type: string
+          example: boxing-analytics-uploads
+        key:
+          type: string
+          example: uploads/user-123/session-123/imu.csv
+        uploadUrl:
+          type: string
+          format: uri
+          example: https://boxing-analytics-uploads.s3.ap-southeast-2.amazonaws.com/uploads/...
+        expiresIn:
+          type: integer
+          example: 900
+        region:
+          type: string
+          example: ap-southeast-2
+
+    CompleteUploadRequest:
+      type: object
+      required:
+        - fileType
+        - key
+      properties:
+        fileType:
+          type: string
+          enum: [csv, mov]
+          example: csv
+        key:
+          type: string
+          example: uploads/user-123/session-123/imu.csv
+
+    CompleteUploadResponse:
+      type: object
+      required:
+        - message
+        - session
+      properties:
+        message:
+          type: string
+          example: Upload session updated
+        session:
+          $ref: '#/components/schemas/Session'
+
     AnalyzeSessionResponse:
       type: object
       required:
@@ -359,7 +423,7 @@ components:
           example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
         status:
           type: string
-          enum: [uploaded, processing, completed, failed]
+          enum: [draft, ready, processing, completed, failed]
           example: processing
         processingStatus:
           type: string
@@ -380,7 +444,7 @@ components:
           example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
         status:
           type: string
-          enum: [uploaded, processing, completed, failed]
+          enum: [draft, ready, processing, completed, failed]
           example: processing
         processingStatus:
           type: string
@@ -427,7 +491,7 @@ components:
         status:
           type: string
           description: Session status used by the app UI
-          enum: [uploaded, processing, completed, failed]
+          enum: [draft, ready, processing, completed, failed]
           example: processing
         errorMessage:
           type: string
@@ -645,7 +709,7 @@ paths:
     get:
       tags:
         - Sessions
-      summary: List uploaded boxing sessions
+      summary: List boxing sessions
       description: Returns saved sessions.
       security:
         - bearerAuth: []
@@ -706,59 +770,11 @@ paths:
               example:
                 error: Failed to load session
 
-  /sessions/upload:
-    post:
-      tags:
-        - Sessions
-      summary: Upload CSV and MOV files and create a boxing session
-      description: |
-        Accepts multipart form-data.
-        Either csvFile or movFile is required.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UploadSessionRequest'
-      responses:
-        '201':
-          description: Files uploaded and session created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UploadSessionResponse'
-        '400':
-          description: Invalid upload payload
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                noFiles:
-                  value:
-                    error: At least one CSV or MOV file is required
-                badCsvExtension:
-                  value:
-                    error: csvFile must be a .csv file
-                badMovExtension:
-                  value:
-                    error: movFile must be a .mov file
-        '500':
-          description: Failed to upload session files
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: Failed to upload session files
-
   /upload-sessions:
     post:
       tags:
         - Sessions
-      summary: Create an upload session before files are uploaded
+      summary: Create an upload session
       description: |
         Creates an `UploadSession` record in the database with initial metadata.
         This is useful when the client wants a session ID before sending multipart file uploads.
@@ -785,6 +801,108 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: Failed to create upload session
+
+  /upload-sessions/{id}/presign:
+    post:
+      tags:
+        - Sessions
+      summary: Create a presigned S3 upload URL for an upload session
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Upload session identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresignUploadRequest'
+      responses:
+        '200':
+          description: Presigned upload URL created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignUploadResponse'
+        '400':
+          description: Invalid presign request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Upload session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Upload session not found
+        '500':
+          description: Failed to create presigned upload URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to create presigned upload URL
+
+  /upload-sessions/{id}/complete:
+    post:
+      tags:
+        - Sessions
+      summary: Mark an S3 upload as completed for a session file
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Upload session identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteUploadRequest'
+      responses:
+        '200':
+          description: Upload session updated after S3 upload completion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteUploadResponse'
+        '400':
+          description: Invalid completion payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Upload session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Upload session not found
+        '500':
+          description: Failed to complete upload session file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to complete upload session file
 
   /sessions/{id}/analyze:
     post:
@@ -906,81 +1024,3 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: Failed to load session results
-
-  /ml/sessions/{id}/status:
-    patch:
-      tags:
-        - ML Internal
-      summary: Update ML processing status for a session
-      description: Internal callback used by ML workers.
-      security: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          description: Session identifier
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SessionStatusUpdateRequest'
-      responses:
-        '200':
-          description: Session status updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionStatusUpdateResponse'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '500':
-          description: Failed to update session status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: Failed to update session status
-
-  /ml/sessions/{id}/results:
-    post:
-      tags:
-        - ML Internal
-      summary: Submit prediction results for a session
-      description: Internal callback used by ML workers.
-      security: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          description: Session identifier
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SessionResultsUpsertRequest'
-      responses:
-        '200':
-          description: Session results recorded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionResultsUpsertResponse'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '500':
-          description: Failed to record session results
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: Failed to record session results

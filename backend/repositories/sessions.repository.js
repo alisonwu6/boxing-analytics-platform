@@ -43,11 +43,14 @@ function toDomainSession(record) {
     sessionDate: serialiseDate(record.sessionDate),
     sessionStartAt: serialiseDate(record.sessionStartAt),
     sessionEndAt: serialiseDate(record.sessionEndAt),
+    csvKey: record.csvKey,
+    movKey: record.movKey,
+    csvUploadStatus: record.csvUploadStatus,
+    movUploadStatus: record.movUploadStatus,
     status: record.status,
     processingStatus: record.processingStatus,
     csvFile: parseJson(record.csvFileData),
     movFile: parseJson(record.movFileData),
-    analysis: parseJson(record.analysisData),
     results: parseJson(record.resultsData),
     createdAt: serialiseDate(record.createdAt),
     updatedAt: serialiseDate(record.updatedAt),
@@ -73,11 +76,14 @@ function toPersistenceInput(session) {
   assignIfPresent(data, session, 'sessionDate', (value) => new Date(value));
   assignIfPresent(data, session, 'sessionStartAt', (value) => new Date(value));
   assignIfPresent(data, session, 'sessionEndAt', (value) => new Date(value));
+  assignIfPresent(data, session, 'csvKey');
+  assignIfPresent(data, session, 'movKey');
+  assignIfPresent(data, session, 'csvUploadStatus');
+  assignIfPresent(data, session, 'movUploadStatus');
   assignIfPresent(data, session, 'status');
   assignIfPresent(data, session, 'processingStatus');
   assignIfPresent(data, session, 'csvFile', stringifyJson);
   assignIfPresent(data, session, 'movFile', stringifyJson);
-  assignIfPresent(data, session, 'analysis', stringifyJson);
   assignIfPresent(data, session, 'results', stringifyJson);
   assignIfPresent(data, session, 'createdAt', (value) => new Date(value));
   assignIfPresent(data, session, 'updatedAt', (value) => new Date(value));
@@ -90,11 +96,6 @@ function toPersistenceInput(session) {
   if ('movFile' in data) {
     data.movFileData = data.movFile;
     delete data.movFile;
-  }
-
-  if ('analysis' in data) {
-    data.analysisData = data.analysis;
-    delete data.analysis;
   }
 
   if ('results' in data) {

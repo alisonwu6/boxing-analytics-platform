@@ -1,24 +1,17 @@
 const express = require('express');
-const upload = require('../middleware/upload.middleware');
 const { requireAuth } = require('../middleware/auth.middleware');
 const sessionsController = require('../controllers/sessions.controller');
 
 const router = express.Router();
 
-router.post(
-  '/upload',
-  requireAuth,
-  upload.fields([
-    { name: 'csvFile', maxCount: 1 },
-    { name: 'movFile', maxCount: 1 },
-  ]),
-  sessionsController.uploadSessionFiles
-);
+router.post('/upload-sessions', requireAuth, sessionsController.createUploadSession);
+router.post('/upload-sessions/:id/presign', requireAuth, sessionsController.createUploadPresign);
+router.post('/upload-sessions/:id/complete', requireAuth, sessionsController.completeUploadSessionFile);
 
-router.get("/", requireAuth, sessionsController.getSessions);
-router.get('/:id/status', requireAuth, sessionsController.getSessionStatus);
-router.post('/:id/analyze', requireAuth, sessionsController.startSessionAnalysis);
-router.get('/:id/results', requireAuth, sessionsController.getSessionResults);
-router.get('/:id', requireAuth, sessionsController.getSessionById);
+router.get('/sessions', requireAuth, sessionsController.getSessions);
+router.get('/sessions/:id/status', requireAuth, sessionsController.getSessionStatus);
+router.post('/sessions/:id/analyze', requireAuth, sessionsController.startSessionAnalysis);
+router.get('/sessions/:id/results', requireAuth, sessionsController.getSessionResults);
+router.get('/sessions/:id', requireAuth, sessionsController.getSessionById);
 
 module.exports = router;
