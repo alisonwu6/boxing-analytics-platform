@@ -123,7 +123,6 @@ components:
         - id
         - userId
         - title
-        - notes
         - sessionDate
         - sessionStartAt
         - sessionEndAt
@@ -150,9 +149,6 @@ components:
         title:
           type: string
           example: Morning Sparring Session
-        notes:
-          type: string
-          example: Front-end contract check
         sessionDate:
           type: string
           format: date-time
@@ -294,9 +290,6 @@ components:
         title:
           type: string
           example: Morning Sparring Session
-        notes:
-          type: string
-          example: Wrist IMU plus reference video
         sessionType:
           type: string
           enum: [training, match]
@@ -322,9 +315,32 @@ components:
       properties:
         message:
           type: string
-          example: Files uploaded successfully
+          example: Files uploaded and session updated
         session:
           $ref: '#/components/schemas/SessionSummary'
+
+    UploadSessionCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Morning Sparring Session
+        sessionType:
+          type: string
+          enum: [training, match]
+          example: training
+        sessionDate:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:03:55.300Z
+        sessionStartAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T13:03:55.300Z
+        sessionEndAt:
+          type: string
+          format: date-time
+          example: 2026-03-29T14:03:55.300Z
 
     AnalyzeSessionResponse:
       type: object
@@ -737,6 +753,38 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: Failed to upload session files
+
+  /upload-sessions:
+    post:
+      tags:
+        - Sessions
+      summary: Create an upload session before files are uploaded
+      description: |
+        Creates an `UploadSession` record in the database with initial metadata.
+        This is useful when the client wants a session ID before sending multipart file uploads.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSessionCreateRequest'
+      responses:
+        '201':
+          description: Upload session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '500':
+          description: Failed to create upload session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to create upload session
 
   /sessions/{id}/analyze:
     post:
