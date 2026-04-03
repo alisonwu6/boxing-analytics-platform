@@ -43,30 +43,12 @@ async function startSessionAnalysis(req, res) {
   }
 }
 
-async function updateSessionStatus(req, res) {
-  try {
-    const payload = await sessionsService.updateSessionStatus(req.params.id, req.body);
-    res.json(payload);
-  } catch (error) {
-    handleControllerError(res, error, 'Failed to update session status');
-  }
-}
-
 async function getSessionResults(req, res) {
   try {
     const results = await sessionsService.getSessionResults(req.params.id, req.userId);
     res.json(results);
   } catch (error) {
     handleControllerError(res, error, 'Failed to load session results');
-  }
-}
-
-async function saveSessionResults(req, res) {
-  try {
-    const payload = await sessionsService.saveSessionResults(req.params.id, req.body);
-    res.json(payload);
-  } catch (error) {
-    handleControllerError(res, error, 'Failed to record session results');
   }
 }
 
@@ -113,9 +95,7 @@ module.exports = {
   getSessionById,
   getSessionStatus,
   startSessionAnalysis,
-  updateSessionStatus,
   getSessionResults,
-  saveSessionResults,
   createUploadSession,
   createUploadPresign,
   completeUploadSessionFile,

@@ -254,101 +254,6 @@ async function startSessionAnalysis(id, userId) {
   };
 }
 
-async function updateSessionStatus(id, input = {}) {
-  const session = await sessionsRepository.findSessionById(id);
-
-  if (!session) {
-    throw createHttpError(404, 'Session not found');
-  }
-
-  const processingStatus = normaliseProcessingStatus(input.processingStatus);
-  const status = input.status
-    ? normaliseSessionStatus(input.status)
-    : processingStatus === 'completed'
-      ? 'completed'
-      : processingStatus === 'failed'
-        ? 'failed'
-        : 'processing';
-
-  const existingResults = session.results || buildEmptyResults();
-  const updatedAt = new Date().toISOString();
-
-  const nextSession = {
-    ...session,
-    status,
-    processingStatus,
-    results: {
-      ...existingResults,
-      modelVersion: input.modelVersion || existingResults.modelVersion,
-      errorMessage: input.errorMessage ?? existingResults.errorMessage,
-      processingStartedAt:
-        input.processingStartedAt || existingResults.processingStartedAt,
-      processingFinishedAt:
-        input.processingFinishedAt || existingResults.processingFinishedAt,
-    },
-    updatedAt,
-  };
-
-  const saved = await sessionsRepository.updateSession(id, nextSession);
-  const results = saved.results || buildEmptyResults();
-
-  return {
-    message: 'Session status updated',
-    sessionId: saved.id,
-    processingStatus: saved.processingStatus,
-    status: saved.status,
-    errorMessage: results.errorMessage,
-    modelVersion: results.modelVersion,
-    processingStartedAt: results.processingStartedAt,
-    processingFinishedAt: results.processingFinishedAt,
-    canFetchResults: saved.status === 'completed',
-  };
-}
-
-async function saveSessionResults(id, input = {}) {
-  const session = await sessionsRepository.findSessionById(id);
-
-  if (!session) {
-    throw createHttpError(404, 'Session not found');
-  }
-
-  const updatedAt = new Date().toISOString();
-  const processingStatus = input.processingStatus === 'failed' ? 'failed' : 'completed';
-  const status = input.status
-    ? normaliseSessionStatus(input.status)
-    : processingStatus === 'failed'
-      ? 'failed'
-      : 'completed';
-
-  const nextSession = {
-    ...session,
-    status,
-    processingStatus,
-    results: {
-      modelVersion: input.modelVersion || null,
-      resultSummary: input.resultSummary || [],
-      metrics: input.metrics || [],
-      punchEvents: input.punchEvents || [],
-      artifacts: input.artifacts || {},
-      errorMessage: input.errorMessage ?? null,
-      processingStartedAt: input.processingStartedAt || session.results?.processingStartedAt || null,
-      processingFinishedAt: input.processingFinishedAt || updatedAt,
-    },
-    updatedAt,
-  };
-
-  const saved = await sessionsRepository.updateSession(id, nextSession);
-
-  return {
-    message: 'Session results recorded',
-    sessionId: saved.id,
-    processingStatus: saved.processingStatus,
-    status: saved.status,
-    modelVersion: saved.results.modelVersion,
-    resultSummary: saved.results.resultSummary,
-  };
-}
-
 async function getSessionResults(id, userId) {
   const session = await findOwnedSession(id, userId, 'Session not found');
 
@@ -435,8 +340,6 @@ module.exports = {
   getSessionStatus,
   createUploadSession,
   startSessionAnalysis,
-  updateSessionStatus,
-  saveSessionResults,
   getSessionResults,
   createUploadPresign,
   completeUploadSessionFile,
