@@ -131,10 +131,7 @@ components:
         - sessionDate
         - sessionStartAt
         - sessionEndAt
-        - date
-        - type
-        - startTime
-        - endTime
+        - sessionType
         - csvUploadStatus
         - movUploadStatus
         - status
@@ -155,34 +152,22 @@ components:
         sessionDate:
           type: string
           format: date-time
-          description: Session date used for grouping and calendar display
+          description: Raw session date timestamp
           example: 2026-03-29T13:03:55.300Z
         sessionStartAt:
           type: string
           format: date-time
-          description: Raw session start timestamp before formatting
+          description: Raw session start timestamp
           example: 2026-03-29T13:03:55.300Z
         sessionEndAt:
           type: string
           format: date-time
-          description: Raw session end timestamp before formatting
+          description: Raw session end timestamp
           example: 2026-03-29T14:03:55.300Z
-        date:
-          type: string
-          description: Convenience field for calendar-based UI grouping
-          example: '2026-03-29'
-        type:
+        sessionType:
           type: string
           enum: [training, match]
           example: training
-        startTime:
-          type: string
-          description: Formatted session start time for UI display
-          example: 11:03 pm
-        endTime:
-          type: string
-          description: Formatted session end time for UI display
-          example: 11:03 pm
         csvUploadStatus:
           allOf:
             - $ref: '#/components/schemas/UploadFileStatus'
@@ -198,9 +183,9 @@ components:
           example: draft
         processingStatus:
           type: string
-          description: Analysis job state. `uploaded` means analysis has not started yet.
-          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
-          example: uploaded
+          description: Analysis job state. `idle` means analysis has not started yet.
+          enum: [idle, queued, preprocessing, inferencing, completed, failed]
+          example: idle
         createdAt:
           type: string
           format: date-time
@@ -214,11 +199,12 @@ components:
       type: object
       required:
         - id
+        - userId
         - title
-        - date
-        - type
-        - startTime
-        - endTime
+        - sessionDate
+        - sessionStartAt
+        - sessionEndAt
+        - sessionType
         - csvUploadStatus
         - movUploadStatus
         - status
@@ -228,24 +214,29 @@ components:
           type: string
           format: uuid
           example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        userId:
+          type: string
+          format: uuid
+          example: 9e5e6d48-d6de-46af-b3d6-6d5f54d6de72
         title:
           type: string
           example: Boxing Session Upload
-        date:
+        sessionDate:
           type: string
-          example: '2026-03-30'
-        type:
+          format: date-time
+          example: 2026-03-30T01:39:10.224Z
+        sessionStartAt:
+          type: string
+          format: date-time
+          example: 2026-03-30T01:39:10.224Z
+        sessionEndAt:
+          type: string
+          format: date-time
+          example: 2026-03-30T02:09:10.224Z
+        sessionType:
           type: string
           enum: [training, match]
           example: training
-        startTime:
-          type: string
-          description: Formatted session start time for UI display
-          example: 1:39am
-        endTime:
-          type: string
-          description: Formatted session end time for UI display
-          example: 1:39am
         csvUploadStatus:
           allOf:
             - $ref: '#/components/schemas/UploadFileStatus'
@@ -261,8 +252,8 @@ components:
         processingStatus:
           type: string
           description: Analysis job state for this session.
-          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
-          example: uploaded
+          enum: [idle, queued, preprocessing, inferencing, completed, failed]
+          example: idle
 
     UploadSessionRequest:
       type: object
@@ -368,6 +359,7 @@ components:
           example: boxing-analytics-uploads
         key:
           type: string
+          description: S3 object key in the format `uploads/{userId}/{sessionId}/{fileName}`.
           example: uploads/user-123/session-123/imu.csv
         uploadUrl:
           type: string
@@ -392,6 +384,7 @@ components:
           example: csv
         key:
           type: string
+          description: The exact S3 object key returned by the presign response, using the format `uploads/{userId}/{sessionId}/{fileName}`.
           example: uploads/user-123/session-123/imu.csv
 
     CompleteUploadResponse:
@@ -427,7 +420,7 @@ components:
           example: processing
         processingStatus:
           type: string
-          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
+          enum: [idle, queued, preprocessing, inferencing, completed, failed]
           example: queued
 
     SessionStatusResponse:
@@ -448,7 +441,7 @@ components:
           example: processing
         processingStatus:
           type: string
-          enum: [uploaded, queued, preprocessing, inferencing, completed, failed]
+          enum: [idle, queued, preprocessing, inferencing, completed, failed]
           example: queued
         modelVersion:
           type: string
@@ -718,6 +711,10 @@ paths:
       tags:
         - Sessions
       summary: Create a presigned S3 upload URL for an upload session
+      description: |
+        This endpoint returns a presigned S3 upload URL for one file.
+        After receiving `uploadUrl`, the client must upload the selected file directly to S3 using `HTTP PUT`.
+        Once the upload succeeds, the client must call `POST /upload-sessions/{id}/complete` with the same object key.
       security:
         - bearerAuth: []
       parameters:
@@ -769,6 +766,9 @@ paths:
       tags:
         - Sessions
       summary: Mark an S3 upload as completed for a session file
+      description: |
+        Use this after the frontend finishes uploading one file to S3.
+        The backend verifies the object exists in S3 before updating upload status.
       security:
         - bearerAuth: []
       parameters:
@@ -794,6 +794,12 @@ paths:
                 $ref: '#/components/schemas/CompleteUploadResponse'
         '400':
           description: Invalid completion payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Uploaded object was not found in S3
           content:
             application/json:
               schema:

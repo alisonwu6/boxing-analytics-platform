@@ -36,7 +36,7 @@ model UploadSession {
   csvUploadStatus  String    @default("missing")
   movUploadStatus  String    @default("missing")
   status           String    @default("draft")
-  processingStatus String    @default("uploaded")
+  processingStatus String    @default("idle")
   csvFileData      String?
   movFileData      String?
   resultsData      String?

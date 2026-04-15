@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const sessionsRepository = require('../repositories/sessions.repository.js');
 const {
+  assertObjectExists,
   createPresignedUpload,
   normaliseFileType,
 } = require('./s3-upload.service');
@@ -17,19 +18,6 @@ function normaliseSessionType(sessionType) {
   }
 
   return 'training';
-}
-
-function formatDateOnly(isoString) {
-  return isoString.slice(0, 10);
-}
-
-function formatTime(isoString) {
-  return new Intl.DateTimeFormat('en-AU', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'UTC',
-  }).format(new Date(isoString)).toLowerCase().replace(' ', '');
 }
 
 function buildEmptyResults() {
@@ -57,7 +45,7 @@ function normaliseSessionStatus(status) {
 
 function normaliseProcessingStatus(processingStatus) {
   const validStatuses = new Set([
-    'uploaded',
+    'idle',
     'queued',
     'preprocessing',
     'inferencing',
@@ -69,7 +57,7 @@ function normaliseProcessingStatus(processingStatus) {
     return processingStatus;
   }
 
-  return 'uploaded';
+  return 'idle';
 }
 
 function getUploadStatus(file, key, explicitStatus) {
@@ -101,10 +89,7 @@ function serialiseSession(session) {
     sessionDate: session.sessionDate,
     sessionStartAt: startAt,
     sessionEndAt: endAt,
-    date: formatDateOnly(session.sessionDate),
-    type: session.sessionType,
-    startTime: formatTime(startAt),
-    endTime: formatTime(endAt),
+    sessionType: session.sessionType,
     csvUploadStatus,
     movUploadStatus,
     status: session.status,
@@ -120,17 +105,18 @@ function serialiseSessionSummary(session) {
   const sessionType = session.sessionType || session.type;
   const csvFile = session.csvFile || session.files?.csv || null;
   const movFile = session.movFile || session.files?.mov || null;
-  const sessionDate = session.sessionDate || `${session.date}T00:00:00.000Z`;
+  const sessionDate = session.sessionDate || session.createdAt;
   const csvKey = session.csvKey || null;
   const movKey = session.movKey || null;
 
   return {
     id: session.id,
+    userId: session.userId,
     title: session.title,
-    date: formatDateOnly(sessionDate),
-    type: sessionType,
-    startTime: formatTime(startAt),
-    endTime: formatTime(endAt),
+    sessionDate,
+    sessionStartAt: startAt,
+    sessionEndAt: endAt,
+    sessionType,
     csvUploadStatus: getUploadStatus(csvFile, csvKey, session.csvUploadStatus),
     movUploadStatus: getUploadStatus(movFile, movKey, session.movUploadStatus),
     status: session.status,
@@ -154,7 +140,7 @@ async function createUploadSession(userId, input = {}) {
     csvUploadStatus: 'missing',
     movUploadStatus: 'missing',
     status: 'draft',
-    processingStatus: 'uploaded',
+    processingStatus: 'idle',
     results: buildEmptyResults(),
     createdAt: now,
     updatedAt: now,
@@ -316,6 +302,8 @@ async function completeUploadSessionFile(id, userId, input = {}) {
     throw createHttpError(400, 'key does not match the presigned MOV upload');
   }
 
+  await assertObjectExists(key);
+
   const nextCsvKey = fileType === 'csv' ? key : session.csvKey;
   const nextMovKey = fileType === 'mov' ? key : session.movKey;
 
@@ -326,7 +314,7 @@ async function completeUploadSessionFile(id, userId, input = {}) {
     csvUploadStatus: fileType === 'csv' ? 'uploaded' : session.csvUploadStatus,
     movUploadStatus: fileType === 'mov' ? 'uploaded' : session.movUploadStatus,
     status: nextCsvKey || nextMovKey ? 'ready' : 'draft',
-    processingStatus: 'uploaded',
+    processingStatus: 'idle',
     updatedAt: new Date().toISOString(),
   };
 

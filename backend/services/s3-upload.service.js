@@ -107,7 +107,37 @@ async function createPresignedUpload({ userId, sessionId, fileType, contentType,
   };
 }
 
+async function assertObjectExists(key) {
+  let HeadObjectCommand;
+
+  try {
+    ({ HeadObjectCommand } = require('@aws-sdk/client-s3'));
+  } catch {
+    throw createHttpError(500, 'AWS S3 SDK is not installed');
+  }
+
+  const client = createS3Client();
+
+  try {
+    await client.send(
+      new HeadObjectCommand({
+        Bucket: getBucketName(),
+        Key: key,
+      })
+    );
+  } catch (error) {
+    const httpCode = error?.$metadata?.httpStatusCode;
+
+    if (httpCode === 404 || httpCode === 403 || error?.name === 'NotFound') {
+      throw createHttpError(409, 'Uploaded object was not found in S3');
+    }
+
+    throw error;
+  }
+}
+
 module.exports = {
+  assertObjectExists,
   createHttpError,
   createPresignedUpload,
   normaliseFileType,
