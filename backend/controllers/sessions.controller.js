@@ -43,15 +43,6 @@ async function startSessionAnalysis(req, res) {
   }
 }
 
-async function updateSessionStatus(req, res) {
-  try {
-    const payload = await sessionsService.updateSessionStatus(req.params.id, req.body);
-    res.json(payload);
-  } catch (error) {
-    handleControllerError(res, error, 'Failed to update session status');
-  }
-}
-
 async function getSessionResults(req, res) {
   try {
     const results = await sessionsService.getSessionResults(req.params.id, req.userId);
@@ -61,38 +52,41 @@ async function getSessionResults(req, res) {
   }
 }
 
-async function saveSessionResults(req, res) {
+async function createUploadSession(req, res) {
   try {
-    const payload = await sessionsService.saveSessionResults(req.params.id, req.body);
-    res.json(payload);
+    const session = await sessionsService.createUploadSession(req.userId, req.body);
+    res.status(201).json(session);
   } catch (error) {
-    handleControllerError(res, error, 'Failed to record session results');
+    handleControllerError(res, error, 'Failed to create upload session');
   }
 }
 
-async function uploadSessionFiles(req, res) {
+async function createUploadPresign(req, res) {
   try {
-    const csvFile = req.files?.csvFile?.[0] || null;
-    const movFile = req.files?.movFile?.[0] || null;
+    const payload = await sessionsService.createUploadPresign(
+      req.params.id,
+      req.userId,
+      req.body
+    );
+    res.json(payload);
+  } catch (error) {
+    handleControllerError(res, error, 'Failed to create presigned upload URL');
+  }
+}
 
-    if (!csvFile && !movFile) {
-      return res.status(400).json({
-        error: 'At least one CSV or MOV file is required',
-      });
-    }
-
-    const session = await sessionsService.createUploadSession(req.userId, req.body);
-    const updatedSession = await sessionsService.attachFilesToSession(session.id, {
-      csvFile,
-      movFile,
-    });
-
-    res.status(201).json({
-      message: 'Files uploaded successfully',
-      session: sessionsService.serialiseSessionSummary(updatedSession),
+async function completeUploadSessionFile(req, res) {
+  try {
+    const session = await sessionsService.completeUploadSessionFile(
+      req.params.id,
+      req.userId,
+      req.body
+    );
+    res.json({
+      message: 'Upload session updated',
+      session,
     });
   } catch (error) {
-    handleControllerError(res, error, 'Failed to upload session files');
+    handleControllerError(res, error, 'Failed to complete upload session file');
   }
 }
 
@@ -101,8 +95,8 @@ module.exports = {
   getSessionById,
   getSessionStatus,
   startSessionAnalysis,
-  updateSessionStatus,
   getSessionResults,
-  saveSessionResults,
-  uploadSessionFiles,
+  createUploadSession,
+  createUploadPresign,
+  completeUploadSessionFile,
 };
