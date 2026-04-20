@@ -1,261 +1,216 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import {
-  ArrowLeft,
-  Home,
-  Upload,
-  FileText,
-  Film,
-  X,
-  CheckCircle2,
-} from "lucide-react";
-import { uploadSessionFiles } from "../services/sessions";
+import AppShell from "../components/layout/AppShell";
+import PageHeader from "../components/layout/PageHeader";
+import StatusMessage from "../components/common/StatusMessage";
+import { uploadSessionService } from "../services/uploadSessionService";
+import { getErrorMessage } from "../utils/error";
 
-type UploadStatus =
-  | "Waiting for upload"
-  | "Uploading files"
-  | "Upload complete"
-  | "Upload failed";
-
-function UploadPage() {
-  const navigate = useNavigate();
+export default function UploadPage() {
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [movFile, setMovFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<UploadStatus>("Waiting for upload");
-  const [loading, setLoading] = useState(false);
 
-  const handleCsvChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    setCsvFile(file);
+  const [csvUploaded, setCsvUploaded] = useState(false);
+  const [movUploaded, setMovUploaded] = useState(false);
+
+  const [loadingCsv, setLoadingCsv] = useState(false);
+  const [loadingMov, setLoadingMov] = useState(false);
+
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const resetMessages = () => {
+    setSuccessMessage("");
+    setErrorMessage("");
   };
 
-  const handleMovChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    setMovFile(file);
-  };
+  const handleUploadCsv = async () => {
+    resetMessages();
 
-  const clearCsvFile = () => {
-    setCsvFile(null);
-  };
-
-  const clearMovFile = () => {
-    setMovFile(null);
-  };
-
-  const clearAllFiles = () => {
-    setCsvFile(null);
-    setMovFile(null);
-    setStatus("Waiting for upload");
-  };
-
-  const handleConfirmUpload = async () => {
-    if (!csvFile && !movFile) {
-      alert("Please select at least one file to upload.");
+    if (!csvFile) {
+      setErrorMessage("Please select one CSV file first.");
       return;
     }
 
+    setLoadingCsv(true);
+
     try {
-      setLoading(true);
-      setStatus("Uploading files");
+      let currentSessionId = sessionId;
 
-      await uploadSessionFiles(csvFile, movFile);
+      if (!currentSessionId) {
+        const createdSession = await uploadSessionService.createUploadSession();
+        currentSessionId = createdSession.id;
+        setSessionId(currentSessionId);
+      }
 
-      setStatus("Upload complete");
+      const csvPresign = await uploadSessionService.createPresignedUrl(currentSessionId, {
+        fileType: "csv",
+        fileName: csvFile.name,
+        contentType: csvFile.type || "text/csv",
+      });
 
-      setTimeout(() => {
-        navigate("/sessions");
-      }, 800);
-    } catch (error: any) {
-      console.error(error);
-      setStatus("Upload failed");
-      alert(error?.response?.data?.message || "Upload failed. Please try again.");
+      await uploadSessionService.uploadFileToStorage(csvPresign.uploadUrl, csvFile);
+
+      await uploadSessionService.completeUpload(currentSessionId, {
+        fileType: "csv",
+        objectKey: csvPresign.objectKey,
+      });
+
+      setCsvUploaded(true);
+      setSuccessMessage("CSV uploaded successfully. You can now upload the MOV file.");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
     } finally {
-      setLoading(false);
+      setLoadingCsv(false);
     }
   };
 
-  const statusColor =
-    status === "Upload complete"
-      ? "text-green-600"
-      : status === "Upload failed"
-      ? "text-red-600"
-      : status === "Uploading files"
-      ? "text-[#1697f6]"
-      : "text-neutral-500";
+  const handleUploadMov = async () => {
+    resetMessages();
+
+    if (!csvUploaded) {
+      setErrorMessage("Please upload the CSV file first.");
+      return;
+    }
+
+    if (!movFile) {
+      setErrorMessage("Please select one MOV file first.");
+      return;
+    }
+
+    if (!sessionId) {
+      setErrorMessage("Session not found. Please upload the CSV file again.");
+      return;
+    }
+
+    setLoadingMov(true);
+
+    try {
+      const movPresign = await uploadSessionService.createPresignedUrl(sessionId, {
+        fileType: "mov",
+        fileName: movFile.name,
+        contentType: movFile.type || "video/quicktime",
+      });
+
+      await uploadSessionService.uploadFileToStorage(movPresign.uploadUrl, movFile);
+
+      await uploadSessionService.completeUpload(sessionId, {
+        fileType: "mov",
+        objectKey: movPresign.objectKey,
+      });
+
+      setMovUploaded(true);
+      setSuccessMessage("MOV uploaded successfully. Your session is ready.");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setLoadingMov(false);
+    }
+  };
+
+  const handleReset = () => {
+    setSessionId(null);
+    setCsvFile(null);
+    setMovFile(null);
+    setCsvUploaded(false);
+    setMovUploaded(false);
+    setSuccessMessage("");
+    setErrorMessage("");
+  };
 
   return (
-    <div className="min-h-screen bg-[#f3f3f3] text-black">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 pb-8 pt-8">
-        <header className="flex items-center justify-between pt-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100"
-          >
-            <ArrowLeft size={22} />
-          </button>
+    <AppShell>
+      <PageHeader
+        title="Upload"
+        subtitle="Upload your CSV file first, then upload your MOV file."
+        showBack
+        backTo="/home"
+        showHome
+      />
 
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-wide">UPLOAD DATA</h1>
-            <p className="mt-1 text-sm text-neutral-500">
-              Upload CSV and MOV files for boxing analysis
-            </p>
-          </div>
+      <div className="px-4 pb-8 sm:px-6 md:px-8">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 rounded-[28px] bg-[#f8f8fb] p-5 shadow-sm sm:p-6">
+          {errorMessage && <StatusMessage type="error" message={errorMessage} />}
+          {successMessage && <StatusMessage type="success" message={successMessage} />}
 
-          <Link
-            to="/home"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100"
-          >
-            <Home size={22} />
-          </Link>
-        </header>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <h2 className="mb-3 text-xl font-semibold text-[#6b46c1]">CSV File</h2>
+              <p className="mb-4 text-sm text-gray-600">
+                Select and upload one CSV file to start a new boxing session.
+              </p>
 
-        <main className="mt-8 flex-1">
-          <div className="rounded-3xl bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
-            <div className="space-y-5">
-              <section className="rounded-3xl bg-[#f8f8f8] p-5">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1697f6] text-white">
-                    <FileText size={24} />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold">CSV File</h2>
-                    <p className="text-sm text-neutral-500">
-                      Upload IMU or sensor dataset
-                    </p>
-                  </div>
-                </div>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                disabled={csvUploaded || loadingCsv}
+                className="mb-3 block w-full text-sm text-gray-600 disabled:opacity-60"
+              />
 
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[#1697f6] bg-[#edf7ff] px-4 py-8 text-center transition hover:bg-[#e4f3ff]">
-                  <Upload className="mb-3 text-[#1697f6]" size={30} />
-                  <span className="text-base font-medium text-[#1697f6]">
-                    Choose CSV File
-                  </span>
-                  <span className="mt-1 text-sm text-neutral-500">
-                    Supported format: .csv
-                  </span>
-                  <input
-                    type="file"
-                    accept=".csv"
-                    className="hidden"
-                    onChange={handleCsvChange}
-                  />
-                </label>
+              <p className="mb-4 text-sm text-gray-500">
+                {csvFile ? csvFile.name : "No CSV file selected."}
+              </p>
 
-                {csvFile && (
-                  <div className="mt-4 flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <CheckCircle2
-                        size={20}
-                        className="shrink-0 text-green-500"
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{csvFile.name}</p>
-                        <p className="text-xs text-neutral-500">CSV selected</p>
-                      </div>
-                    </div>
+              <button
+                type="button"
+                onClick={handleUploadCsv}
+                disabled={!csvFile || csvUploaded || loadingCsv}
+                className="w-full rounded-xl bg-[#6b46c1] px-4 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loadingCsv
+                  ? "Uploading CSV..."
+                  : csvUploaded
+                  ? "CSV Uploaded"
+                  : "Upload CSV"}
+              </button>
+            </div>
 
-                    <button
-                      onClick={clearCsvFile}
-                      className="ml-3 rounded-full p-2 transition hover:bg-neutral-100"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                )}
-              </section>
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <h2 className="mb-3 text-xl font-semibold text-[#6b46c1]">MOV File</h2>
+              <p className="mb-4 text-sm text-gray-600">
+                After the CSV upload is complete, select and upload one MOV file.
+              </p>
 
-              <section className="rounded-3xl bg-[#f8f8f8] p-5">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1697f6] text-white">
-                    <Film size={24} />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold">MOV File</h2>
-                    <p className="text-sm text-neutral-500">
-                      Upload boxing session video
-                    </p>
-                  </div>
-                </div>
+              <input
+                type="file"
+                accept=".mov,video/quicktime"
+                onChange={(e) => setMovFile(e.target.files?.[0] || null)}
+                disabled={!csvUploaded || movUploaded || loadingMov}
+                className="mb-3 block w-full text-sm text-gray-600 disabled:opacity-60"
+              />
 
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[#1697f6] bg-[#edf7ff] px-4 py-8 text-center transition hover:bg-[#e4f3ff]">
-                  <Upload className="mb-3 text-[#1697f6]" size={30} />
-                  <span className="text-base font-medium text-[#1697f6]">
-                    Choose MOV File
-                  </span>
-                  <span className="mt-1 text-sm text-neutral-500">
-                    Supported format: .mov
-                  </span>
-                  <input
-                    type="file"
-                    accept=".mov,video/quicktime"
-                    className="hidden"
-                    onChange={handleMovChange}
-                  />
-                </label>
+              <p className="mb-4 text-sm text-gray-500">
+                {movFile ? movFile.name : "No MOV file selected."}
+              </p>
 
-                {movFile && (
-                  <div className="mt-4 flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <CheckCircle2
-                        size={20}
-                        className="shrink-0 text-green-500"
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{movFile.name}</p>
-                        <p className="text-xs text-neutral-500">MOV selected</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={clearMovFile}
-                      className="ml-3 rounded-full p-2 transition hover:bg-neutral-100"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                )}
-              </section>
-
-              <section className="rounded-3xl bg-[#f8f8f8] p-5">
-                <h2 className="text-lg font-semibold">Upload Status</h2>
-                <p className={`mt-3 text-sm font-medium ${statusColor}`}>
-                  {status}
-                </p>
-
-                {status === "Upload complete" && (
-                  <Link
-                    to="/sessions"
-                    className="mt-5 inline-flex rounded-2xl bg-[#1697f6] px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95"
-                  >
-                    Go to Sessions
-                  </Link>
-                )}
-              </section>
+              <button
+                type="button"
+                onClick={handleUploadMov}
+                disabled={!csvUploaded || !movFile || movUploaded || loadingMov}
+                className="w-full rounded-xl bg-[#6b46c1] px-4 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loadingMov
+                  ? "Uploading MOV..."
+                  : movUploaded
+                  ? "MOV Uploaded"
+                  : "Upload MOV"}
+              </button>
             </div>
           </div>
-        </main>
 
-        <footer className="mt-6 flex gap-3">
-          <button
-            onClick={clearAllFiles}
-            disabled={loading}
-            className="flex-1 rounded-2xl bg-white px-4 py-4 text-base font-semibold text-black shadow-sm transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Clear
-          </button>
-
-          <button
-            onClick={handleConfirmUpload}
-            disabled={loading}
-            className="flex-1 rounded-2xl bg-[#1697f6] px-4 py-4 text-base font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Uploading..." : "Confirm Upload"}
-          </button>
-        </footer>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="rounded-xl border border-gray-200 bg-white px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
-
-export default UploadPage;

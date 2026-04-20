@@ -8,7 +8,7 @@ import {
   Layers3,
   ClipboardCheck,
 } from "lucide-react";
-import { getCurrentUser } from "../services/auth";
+import { getCurrentUser } from "../services/authService";
 
 type CurrentUser = {
   id?: string;

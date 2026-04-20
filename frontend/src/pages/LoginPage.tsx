@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Home, LogIn } from "lucide-react";
-import { loginUser } from "../services/auth";
+import { useNavigate, Link } from "react-router-dom";
+import AppShell from "../components/layout/AppShell";
+import PageHeader from "../components/layout/PageHeader";
+import StatusMessage from "../components/common/StatusMessage";
+import { authService } from "../services/authService";
+import { getErrorMessage } from "../utils/error";
 
-function LoginPage() {
+export default function LoginPage() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -11,121 +14,75 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setErrorMessage("");
-
-    if (!email || !password) {
-      setErrorMessage("Please enter both email and password.");
-      return;
-    }
+    setLoading(true);
 
     try {
-      setLoading(true);
-
-      const data = await loginUser({
-        email,
-        password,
-      });
-
-      if (data?.token) {
-        localStorage.setItem("token", data.token);
-        navigate("/home");
-      } else {
-        setErrorMessage("Login succeeded but no token was returned.");
-      }
-    } catch (error: any) {
-      setErrorMessage(
-        error?.response?.data?.message ||
-          "Login failed. Please check your credentials."
-      );
+      await authService.login({ email, password });
+      navigate("/home");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f3f3] text-black">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-6 pb-8 pt-8">
-        <header className="flex items-center justify-between pt-4">
+    <AppShell className="max-w-2xl">
+      <PageHeader
+        title="Login"
+        subtitle="Sign in to access your boxing analytics sessions"
+      />
+
+      <div className="px-4 pb-8 sm:px-6 md:px-8">
+        <form
+          onSubmit={handleLogin}
+          className="mx-auto flex w-full max-w-xl flex-col gap-4 rounded-[24px] bg-[#f8f8fb] p-5 shadow-sm sm:p-6"
+        >
+          {errorMessage && <StatusMessage type="error" message={errorMessage} />}
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-gray-700">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              className="rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none transition focus:border-[#6b46c1]"
+              required
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-gray-700">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none transition focus:border-[#6b46c1]"
+              required
+            />
+          </div>
+
           <button
-            onClick={() => navigate(-1)}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100"
+            type="submit"
+            disabled={loading}
+            className="mt-2 rounded-xl bg-[#6b46c1] px-4 py-3 font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <ArrowLeft size={22} />
+            {loading ? "Logging in..." : "Login"}
           </button>
 
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-wide">LOGIN</h1>
-            <p className="mt-1 text-sm text-neutral-500">
-              Access your boxing analytics account
-            </p>
-          </div>
-
-          <Link
-            to="/"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-neutral-100"
-          >
-            <Home size={22} />
-          </Link>
-        </header>
-
-        <main className="mt-8 flex-1">
-          <div className="rounded-3xl bg-white p-6 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-neutral-700">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  className="w-full rounded-2xl border border-neutral-200 bg-[#f8f8f8] px-4 py-4 text-sm outline-none transition focus:border-[#1697f6]"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-neutral-700">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full rounded-2xl border border-neutral-200 bg-[#f8f8f8] px-4 py-4 text-sm outline-none transition focus:border-[#1697f6]"
-                />
-              </div>
-
-              {errorMessage && (
-                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
-                  {errorMessage}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1697f6] px-4 py-4 text-base font-semibold text-white shadow-[0_8px_18px_rgba(0,0,0,0.15)] transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <LogIn size={18} />
-                {loading ? "Logging in..." : "Login"}
-              </button>
-            </form>
-
-            <p className="mt-5 text-center text-sm text-neutral-500">
-              Don&apos;t have an account?{" "}
-              <Link to="/register" className="font-semibold text-[#1697f6]">
-                Register
-              </Link>
-            </p>
-          </div>
-        </main>
+          <p className="text-center text-sm text-gray-500">
+            Don&apos;t have an account?{" "}
+            <Link to="/register" className="font-medium text-[#6b46c1] hover:underline">
+              Register
+            </Link>
+          </p>
+        </form>
       </div>
-    </div>
+    </AppShell>
   );
 }
-
-export default LoginPage;
