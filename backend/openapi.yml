@@ -5,12 +5,14 @@ info:
   description: |
     API for the boxing analytics platform.
 
-    Current local flow:
+    Session lifecycle:
     1. User registers or logs in
-    2. User creates an upload session and uploads IMU CSV and/or MOV video for one session
-    3. The backend records upload state and session metadata in the database
-    4. The backend starts local analysis for the uploaded session
-    5. Frontend reads saved sessions, progress, and results from the backend
+    2. User creates an upload session with metadata (title, type, date)
+    3. For each file (CSV / MOV), the frontend requests a presigned S3 URL, uploads directly to S3, then confirms completion to the backend
+    4. User triggers analysis — the backend fires a Python ML subprocess in the background
+    5. The ML script reads the uploaded files directly from S3 and runs inference (IMU model for CSV, video model for MOV)
+    6. Results are written back to the database when inference completes
+    7. Frontend polls session status and fetches results once `canFetchResults` is true
 
 servers:
   - url: http://localhost:3001
@@ -465,10 +467,86 @@ components:
           type: boolean
           example: false
 
+    Metric:
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        name:
+          type: string
+          example: totalPunches
+        value:
+          example: 42
+
+    PunchEvent:
+      type: object
+      required:
+        - t
+        - hand
+        - type
+      properties:
+        t:
+          type: number
+          description: Timestamp in seconds from session start
+          example: 1.23
+        hand:
+          type: string
+          enum: [left, right]
+          example: right
+        type:
+          type: string
+          description: Punch classification (e.g. jab, cross, hook, uppercut)
+          example: jab
+
     SessionResultsPayload:
       type: object
-      description: Placeholder schema. Session result fields will be confirmed later.
-      additionalProperties: true
+      required:
+        - sessionId
+        - modelVersion
+        - resultSummary
+        - metrics
+        - punchEvents
+        - artifacts
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          example: c3687532-5f0d-4da1-88da-6057ec4ca0d7
+        modelVersion:
+          type: string
+          nullable: true
+          example: imu-punch-v1.0.0
+        resultSummary:
+          type: array
+          items: {}
+          description: High-level summary items produced by the ML model
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+          description: Quantitative metrics for the session
+        punchEvents:
+          type: array
+          items:
+            $ref: '#/components/schemas/PunchEvent'
+          description: Per-punch detection events with timestamps
+        artifacts:
+          type: object
+          description: Optional extra outputs from the ML model (e.g. annotated video URLs)
+          additionalProperties: true
+        errorMessage:
+          type: string
+          nullable: true
+          description: Set if inference failed
+        processingStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+        processingFinishedAt:
+          type: string
+          format: date-time
+          nullable: true
 
   responses:
     UnauthorizedError:
@@ -828,7 +906,9 @@ paths:
       summary: Start analysis for a session
       description: |
         Call this after the user clicks Analyze Session.
-        The backend marks the session as queued so the UI can start polling status.
+        The backend immediately returns 202 and fires ML inference as a background subprocess.
+        The Python script reads the uploaded CSV (and MOV if present) directly from S3 and writes results back to the database when done.
+        Poll `GET /sessions/{id}/status` until `canFetchResults` is true, then call `GET /sessions/{id}/results`.
       security:
         - bearerAuth: []
       parameters:
