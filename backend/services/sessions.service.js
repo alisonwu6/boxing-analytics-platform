@@ -5,6 +5,7 @@ const {
   createPresignedUpload,
   normaliseFileType,
 } = require('./s3-upload.service');
+const { runSessionInference } = require('./ml-inference.service');
 
 function createHttpError(status, message) {
   const error = new Error(message);
@@ -232,12 +233,56 @@ async function startSessionAnalysis(id, userId) {
   };
 
   const saved = await sessionsRepository.updateSession(id, nextSession);
+
+  // Fire-and-forget: run ML inference in background, do not await
+  _runInferenceBackground(saved);
+
   return {
     message: 'Session analysis started',
     sessionId: saved.id,
     status: saved.status,
     processingStatus: saved.processingStatus,
   };
+}
+
+async function _runInferenceBackground(session) {
+  const startedAt = session.results?.processingStartedAt || new Date().toISOString();
+
+  try {
+    const { payload } = await runSessionInference(session);
+    const finishedAt = new Date().toISOString();
+
+    await sessionsRepository.updateSession(session.id, {
+      ...session,
+      status: 'completed',
+      processingStatus: 'completed',
+      results: {
+        ...buildEmptyResults(),
+        ...payload,
+        errorMessage: null,
+        processingStartedAt: startedAt,
+        processingFinishedAt: finishedAt,
+      },
+      updatedAt: finishedAt,
+    });
+  } catch (error) {
+    const finishedAt = new Date().toISOString();
+    console.error('[ML inference failed]', session.id, error.message);
+
+    await sessionsRepository.updateSession(session.id, {
+      ...session,
+      status: 'failed',
+      processingStatus: 'failed',
+      results: {
+        ...buildEmptyResults(),
+        ...(session.results || {}),
+        errorMessage: error.message || 'Inference failed',
+        processingStartedAt: startedAt,
+        processingFinishedAt: finishedAt,
+      },
+      updatedAt: finishedAt,
+    });
+  }
 }
 
 async function getSessionResults(id, userId) {
