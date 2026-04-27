@@ -9,18 +9,23 @@ export interface CreateUploadSessionResponse {
 
 export interface PresignRequest {
   fileType: UploadFileType;
-  fileName: string;
+  originalFileName: string;
   contentType: string;
 }
 
 export interface PresignResponse {
   uploadUrl: string;
-  objectKey: string;
+  key: string;
+  bucket?: string;
+  region?: string;
+  expiresIn?: number;
+  uploadSessionId?: string;
+  fileType?: UploadFileType;
 }
 
 export interface CompleteUploadRequest {
   fileType: UploadFileType;
-  objectKey: string;
+  key: string;
 }
 
 export interface UploadSessionItem {

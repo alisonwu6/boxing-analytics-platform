@@ -46,7 +46,7 @@ export default function UploadPage() {
 
       const csvPresign = await uploadSessionService.createPresignedUrl(currentSessionId, {
         fileType: "csv",
-        fileName: csvFile.name,
+        originalFileName: csvFile.name,
         contentType: csvFile.type || "text/csv",
       });
 
@@ -54,7 +54,7 @@ export default function UploadPage() {
 
       await uploadSessionService.completeUpload(currentSessionId, {
         fileType: "csv",
-        objectKey: csvPresign.objectKey,
+        key: csvPresign.key,
       });
 
       setCsvUploaded(true);
@@ -89,7 +89,7 @@ export default function UploadPage() {
     try {
       const movPresign = await uploadSessionService.createPresignedUrl(sessionId, {
         fileType: "mov",
-        fileName: movFile.name,
+        originalFileName: movFile.name,
         contentType: movFile.type || "video/quicktime",
       });
 
@@ -97,7 +97,7 @@ export default function UploadPage() {
 
       await uploadSessionService.completeUpload(sessionId, {
         fileType: "mov",
-        objectKey: movPresign.objectKey,
+        key: movPresign.key,
       });
 
       setMovUploaded(true);
