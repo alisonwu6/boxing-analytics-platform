@@ -1,0 +1,44 @@
+version: 1.0
+
+observability:
+  tracing:
+    vendor: AWSXRAY
+
+network:
+  ingressConfiguration:
+    isPubliclyAccessible: true
+  egressConfiguration:
+    egressType: DEFAULT
+
+instanceConfiguration:
+  cpu: 1 vCPU
+  memory: 2 GB
+
+service:
+  port: 3001
+
+  environmentVariables:
+    - name: PORT
+      value: "3001"
+    - name: UPLOAD_PROVIDER
+      value: "s3"
+    - name: AWS_REGION
+      value: "ap-southeast-2"
+    - name: S3_BUCKET_NAME
+      value: "boxing-analytics-upload-files"
+    - name: DB_PORT
+      value: "5432"
+    - name: DB_NAME
+      value: "boxing-analytics"
+
+  environmentSecrets:
+    - name: DB_HOST
+      value: "arn:aws:ssm:ap-southeast-2:953158925022:parameter/boxing-analytics/DB_HOST"
+    - name: DB_USER
+      value: "arn:aws:ssm:ap-southeast-2:953158925022:parameter/boxing-analytics/DB_USER"
+    - name: DB_PASSWORD
+      value: "arn:aws:ssm:ap-southeast-2:953158925022:parameter/boxing-analytics/DB_PASSWORD"
+    - name: DATABASE_URL
+      value: "arn:aws:ssm:ap-southeast-2:953158925022:parameter/boxing-analytics/DATABASE_URL"
+    - name: JWT_SECRET
+      value: "arn:aws:ssm:ap-southeast-2:953158925022:parameter/boxing-analytics/JWT_SECRET"
