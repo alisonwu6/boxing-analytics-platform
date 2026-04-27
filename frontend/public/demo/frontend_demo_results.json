@@ -1,0 +1,78 @@
+{
+  "sessionId": "demo-terer-local",
+  "source": "TereR_Data_For_ML.xlsx (manual labels used for local demo)",
+  "summary": {
+    "totalPunches": 350,
+    "sessionStartSec": 118.555,
+    "sessionEndSec": 465.98,
+    "activeDurationSec": 347.425,
+    "punchesPerMinute": 60.44,
+    "dominantType": "Jab"
+  },
+  "typeDistribution": {
+    "Jab": 120,
+    "Uppercut": 120,
+    "Hook": 110
+  },
+  "typeSummary": [
+    {
+      "type": "Hook",
+      "count": 110,
+      "avg_peak_acc": 6.039,
+      "avg_peak_rotation": 844.913,
+      "avg_peak_jerk": 268.893,
+      "avg_duration": 0.974
+    },
+    {
+      "type": "Jab",
+      "count": 120,
+      "avg_peak_acc": 6.16,
+      "avg_peak_rotation": 779.213,
+      "avg_peak_jerk": 310.633,
+      "avg_duration": 0.771
+    },
+    {
+      "type": "Uppercut",
+      "count": 120,
+      "avg_peak_acc": 6.704,
+      "avg_peak_rotation": 822.03,
+      "avg_peak_jerk": 268.265,
+      "avg_duration": 0.764
+    }
+  ],
+  "phaseSummary": [
+    {
+      "phase": "early",
+      "punches": 117,
+      "avg_peak_acc": 6.26,
+      "avg_peak_rotation": 784.2,
+      "avg_duration": 0.777
+    },
+    {
+      "phase": "middle",
+      "punches": 116,
+      "avg_peak_acc": 6.576,
+      "avg_peak_rotation": 813.164,
+      "avg_duration": 0.761
+    },
+    {
+      "phase": "late",
+      "punches": 117,
+      "avg_peak_acc": 6.092,
+      "avg_peak_rotation": 846.25,
+      "avg_duration": 0.957
+    }
+  ],
+  "recommendations": [
+    "Late-session peak acceleration drops slightly, so endurance and power maintenance should be a training focus.",
+    "Punch duration becomes longer in the late phase, which may indicate slower recovery or fatigue.",
+    "Uppercut shows the strongest average acceleration in this session.",
+    "Hook generates the highest average rotation, which can be highlighted as a technical strength."
+  ],
+  "chartFiles": {
+    "typeDistribution": "type_distribution.png",
+    "peakAccelerationTrend": "peak_acc_trend.png",
+    "peakRotationTrend": "rotation_trend.png",
+    "cadenceBlocks": "cadence_blocks.png"
+  }
+}
