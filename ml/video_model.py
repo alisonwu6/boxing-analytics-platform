@@ -1,40 +1,80 @@
 """
 Video / MOV inference module.
 
-Reads a boxing session video from S3 and returns
-insights derived from visual analysis (pose, guard, footwork, etc.).
+Downloads the boxing session video and IMU CSV from S3, runs the
+Video + IMU sync framework to produce an annotated output video,
+then uploads the result back to S3.
 
-TODO (ML partner): implement infer().
+Returns only artifact references — all numeric punch data comes from imu_model.
 """
 
-import boto3
-import io
-import tempfile
 import os
+import sys
+import tempfile
+
+import boto3
 
 
-def infer(bucket: str, region: str, mov_key: str) -> dict:
+def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str) -> dict:
     """
-    Read the MOV video from S3 and run inference.
+    Download MOV + CSV from S3, produce an annotated video, upload back to S3.
 
     Args:
-        bucket:  S3 bucket name
-        region:  AWS region
-        mov_key: S3 object key for the MOV video file
+        bucket:     S3 bucket name
+        region:     AWS region
+        mov_key:    S3 key of the original MOV file
+        csv_key:    S3 key of the IMU CSV file (needed for video-IMU sync)
+        session_id: session identifier, used to build the output S3 key
 
     Returns:
-        dict with keys to be merged into the final result:
-            resultSummary (list)   — video-derived summary items
-            metrics       (list)   — video-derived metrics
-            punchEvents   (list)   — video-derived punch events (optional, to cross-ref IMU)
-            artifacts     (dict)   — e.g. pose overlay video URL
-
-    Note: video files can be large. Stream or download to a temp file:
-        s3 = boto3.client("s3", region_name=region)
-        with tempfile.NamedTemporaryFile(suffix=".mov", delete=False) as tmp:
-            s3.download_fileobj(bucket, mov_key, tmp)
-            tmp_path = tmp.name
-        # ... process tmp_path ...
-        os.unlink(tmp_path)
+        dict of artifact references to store in session results:
+            annotatedVideoKey (str) — S3 key of the annotated output MP4
     """
-    raise NotImplementedError("Video inference not yet implemented")
+    # Lazy import — cv2/mediapipe are heavy; only load when video is actually needed
+    # video_analysis/ now lives inside ml/ alongside this file
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from video_analysis.boxing_analytics.pipeline import run_pipeline
+
+    s3 = boto3.client("s3", region_name=region)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Download original video
+        video_path = os.path.join(tmp_dir, "input.mov")
+        with open(video_path, "wb") as f:
+            s3.download_fileobj(bucket, mov_key, f)
+
+        # Download IMU CSV for sync
+        csv_path = os.path.join(tmp_dir, "imu.csv")
+        with open(csv_path, "wb") as f:
+            s3.download_fileobj(bucket, csv_key, f)
+
+        out_dir = os.path.join(tmp_dir, "output")
+        os.makedirs(out_dir, exist_ok=True)
+
+        # Redirect stdout to stderr so pipeline progress logs don't pollute the JSON output
+        old_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        try:
+            run_pipeline(
+                video_path=video_path,
+                imu_r_path=csv_path,
+                imu_l_path=None,
+                out_dir=out_dir,
+                write_video=True,
+            )
+        finally:
+            sys.stdout = old_stdout
+
+        # Upload annotated video back to S3
+        annotated_path = os.path.join(out_dir, "input_annotated.mp4")
+        output_key = f"outputs/{session_id}/annotated_video.mp4"
+
+        with open(annotated_path, "rb") as f:
+            s3.upload_fileobj(
+                f, bucket, output_key,
+                ExtraArgs={"ContentType": "video/mp4"},
+            )
+
+    return {
+        "annotatedVideoKey": output_key,
+    }

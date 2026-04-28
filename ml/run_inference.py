@@ -41,23 +41,21 @@ def parse_args():
     return parser.parse_args()
 
 
-def merge(base: dict, extra: dict) -> dict:
-    """Merge video results into the IMU base result."""
-    return {
-        **base,
-        "resultSummary": base.get("resultSummary", []) + extra.get("resultSummary", []),
-        "metrics":       base.get("metrics", [])       + extra.get("metrics", []),
-        "punchEvents":   base.get("punchEvents", [])   + extra.get("punchEvents", []),
-        "artifacts":     {**base.get("artifacts", {}), **extra.get("artifacts", {})},
-    }
-
-
 def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -> dict:
+    # IMU CSV → punch data (metrics, punchEvents) → stored in backend DB
     result = imu_model.infer(bucket=bucket, region=region, csv_key=csv_key)
 
     if mov_key:
-        video_result = video_model.infer(bucket=bucket, region=region, mov_key=mov_key)
-        result = merge(result, video_result)
+        # Video + CSV → sync framework → annotated video uploaded to S3
+        # Only the artifact reference (S3 key) is added to result — no data merge
+        video_artifacts = video_model.infer(
+            bucket=bucket,
+            region=region,
+            mov_key=mov_key,
+            csv_key=csv_key,
+            session_id=session_id,
+        )
+        result["artifacts"].update(video_artifacts)
 
     return result
 

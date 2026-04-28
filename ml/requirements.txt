@@ -5,3 +5,6 @@ scipy
 joblib
 matplotlib
 openpyxl
+boto3
+opencv-python
+mediapipe
