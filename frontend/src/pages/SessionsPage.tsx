@@ -9,27 +9,11 @@ import {
   Search,
   PlayCircle,
   AlertCircle,
+  Activity,
 } from "lucide-react";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
-
-type UploadedFile = {
-  fieldName?: string;
-  originalName?: string;
-  fileName?: string;
-  name?: string;
-  mimeType?: string;
-  size?: number;
-  storedName?: string;
-  relativePath?: string;
-  key?: string;
-  objectKey?: string;
-  s3Key?: string;
-  url?: string;
-  status?: string;
-  uploaded?: boolean;
-};
 
 type Session = {
   id: string;
@@ -39,44 +23,23 @@ type Session = {
   notes?: string;
   sessionType?: string;
 
+  // Session lifecycle status:
+  // draft / ready / processing / completed / failed
   status?: string;
+
+  // ML processing status:
+  // idle / queued / completed / failed
   processingStatus?: string;
-  uploadStatus?: string;
+
+  // Upload status from backend
+  csvUploadStatus?: string;
+  movUploadStatus?: string;
 
   sessionDate?: string;
   sessionStartAt?: string;
   sessionEndAt?: string;
   createdAt?: string;
   updatedAt?: string;
-  created_at?: string;
-  updated_at?: string;
-
-  csvFile?: UploadedFile | null;
-  movFile?: UploadedFile | null;
-
-  csvUploaded?: boolean;
-  movUploaded?: boolean;
-
-  csvFileName?: string;
-  movFileName?: string;
-
-  csvOriginalName?: string;
-  movOriginalName?: string;
-
-  csvKey?: string;
-  movKey?: string;
-
-  csvObjectKey?: string;
-  movObjectKey?: string;
-
-  csvS3Key?: string;
-  movS3Key?: string;
-
-  files?: {
-    csv?: UploadedFile;
-    mov?: UploadedFile;
-    video?: UploadedFile;
-  } | UploadedFile[];
 
   [key: string]: any;
 };
@@ -111,179 +74,12 @@ export default function SessionsPage() {
     };
   };
 
-  const getFileNameFromKey = (key?: string | null) => {
-    if (!key) return "";
-
-    try {
-      const cleanKey = key.split("?")[0];
-      const parts = cleanKey.split("/");
-      return decodeURIComponent(parts[parts.length - 1] || cleanKey);
-    } catch {
-      return key;
-    }
-  };
-
-  const getFileFromArray = (
-    files: UploadedFile[] | undefined,
-    fileType: "csv" | "mov"
-  ) => {
-    if (!files || !Array.isArray(files)) return undefined;
-
-    return files.find((file) => {
-      const field = (file.fieldName || "").toLowerCase();
-      const mime = (file.mimeType || "").toLowerCase();
-      const name = (
-        file.originalName ||
-        file.fileName ||
-        file.name ||
-        file.storedName ||
-        file.key ||
-        file.objectKey ||
-        file.s3Key ||
-        ""
-      ).toLowerCase();
-
-      if (fileType === "csv") {
-        return (
-          field.includes("csv") ||
-          mime.includes("csv") ||
-          name.endsWith(".csv")
-        );
-      }
-
-      return (
-        field.includes("mov") ||
-        field.includes("video") ||
-        mime.includes("quicktime") ||
-        mime.includes("video") ||
-        name.endsWith(".mov") ||
-        name.endsWith(".mp4")
-      );
-    });
-  };
-
-  const getNestedFile = (session: Session, fileType: "csv" | "mov") => {
-    if (fileType === "csv") {
-      if (session.csvFile) return session.csvFile;
-
-      if (Array.isArray(session.files)) {
-        return getFileFromArray(session.files, "csv");
-      }
-
-      return session.files?.csv;
-    }
-
-    if (session.movFile) return session.movFile;
-
-    if (Array.isArray(session.files)) {
-      return getFileFromArray(session.files, "mov");
-    }
-
-    return session.files?.mov || session.files?.video;
-  };
-
-  const getCsvText = (session: Session) => {
-    const file = getNestedFile(session, "csv");
-
-    const name =
-      file?.originalName ||
-      file?.fileName ||
-      file?.name ||
-      session.csvOriginalName ||
-      session.csvFileName;
-
-    if (name) return name;
-
-    const key =
-      file?.key ||
-      file?.objectKey ||
-      file?.s3Key ||
-      file?.storedName ||
-      session.csvKey ||
-      session.csvObjectKey ||
-      session.csvS3Key;
-
-    if (key) return getFileNameFromKey(key) || "Uploaded";
-
-    if (session.csvUploaded || file?.uploaded) return "Uploaded";
-
-    return "Not uploaded";
-  };
-
-  const getMovText = (session: Session) => {
-    const file = getNestedFile(session, "mov");
-
-    const name =
-      file?.originalName ||
-      file?.fileName ||
-      file?.name ||
-      session.movOriginalName ||
-      session.movFileName;
-
-    if (name) return name;
-
-    const key =
-      file?.key ||
-      file?.objectKey ||
-      file?.s3Key ||
-      file?.storedName ||
-      session.movKey ||
-      session.movObjectKey ||
-      session.movS3Key;
-
-    if (key) return getFileNameFromKey(key) || "Uploaded";
-
-    if (session.movUploaded || file?.uploaded) return "Uploaded";
-
-    return "Not uploaded";
-  };
-
-  const hasCsv = (session: Session) => {
-    return getCsvText(session) !== "Not uploaded";
-  };
-
-  const hasMov = (session: Session) => {
-    return getMovText(session) !== "Not uploaded";
-  };
-
-  const getStatus = (session: Session) => {
-    return (
-      session.processingStatus ||
-      session.uploadStatus ||
-      session.status ||
-      (hasCsv(session) || hasMov(session) ? "uploaded" : "idle")
-    );
-  };
-
-  const formatDate = (session: Session) => {
-    const rawDate =
-      session.sessionDate ||
-      session.sessionStartAt ||
-      session.createdAt ||
-      session.created_at ||
-      session.updatedAt ||
-      session.updated_at;
-
-    if (!rawDate) return "N/A";
-
-    const date = new Date(rawDate);
-
-    if (Number.isNaN(date.getTime())) return "N/A";
-
-    return date.toLocaleString();
-  };
-
-  const getShortId = (id: string) => {
-    if (!id) return "N/A";
-    return id.slice(0, 8);
-  };
-
   const fetchSessions = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const res = await fetch(`${API_BASE_URL}/upload-sessions`, {
+      const res = await fetch(`${API_BASE_URL}/sessions`, {
         method: "GET",
         headers: {
           ...getAuthHeaders(),
@@ -297,23 +93,21 @@ export default function SessionsPage() {
       }
 
       if (!res.ok) {
-        throw new Error(`Failed to fetch upload sessions: ${res.status}`);
+        throw new Error(`Failed to fetch sessions: ${res.status}`);
       }
 
       const data = await res.json();
 
-      console.log("Upload sessions from backend:", data);
+      console.log("Sessions from backend:", data);
 
       const sessionList: Session[] = Array.isArray(data)
         ? data
         : Array.isArray(data.sessions)
         ? data.sessions
-        : Array.isArray(data.uploadSessions)
-        ? data.uploadSessions
-        : Array.isArray(data.items)
-        ? data.items
         : Array.isArray(data.data)
         ? data.data
+        : Array.isArray(data.items)
+        ? data.items
         : [];
 
       setSessions(sessionList);
@@ -323,7 +117,7 @@ export default function SessionsPage() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Could not load upload sessions.");
+        setError("Could not load sessions.");
       }
     } finally {
       setLoading(false);
@@ -334,6 +128,51 @@ export default function SessionsPage() {
     fetchSessions();
   }, []);
 
+  const getShortId = (id: string) => {
+    if (!id) return "N/A";
+    return id.slice(0, 8);
+  };
+
+  const getSessionStatus = (session: Session) => {
+    return session.status || "draft";
+  };
+
+  const getProcessingStatus = (session: Session) => {
+    return session.processingStatus || "idle";
+  };
+
+  const hasCsv = (session: Session) => {
+    return session.csvUploadStatus === "uploaded";
+  };
+
+  const hasMov = (session: Session) => {
+    return session.movUploadStatus === "uploaded";
+  };
+
+  const getCsvText = (session: Session) => {
+    return hasCsv(session) ? "Uploaded" : "Not uploaded";
+  };
+
+  const getMovText = (session: Session) => {
+    return hasMov(session) ? "Uploaded" : "Not uploaded";
+  };
+
+  const formatDate = (session: Session) => {
+    const rawDate =
+      session.sessionDate ||
+      session.sessionStartAt ||
+      session.createdAt ||
+      session.updatedAt;
+
+    if (!rawDate) return "N/A";
+
+    const date = new Date(rawDate);
+
+    if (Number.isNaN(date.getTime())) return "N/A";
+
+    return date.toLocaleString();
+  };
+
   const filteredSessions = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
 
@@ -342,16 +181,18 @@ export default function SessionsPage() {
     return sessions.filter((session) => {
       const title = session.title || "";
       const id = session.id || "";
-      const csvName = getCsvText(session);
-      const movName = getMovText(session);
-      const status = getStatus(session);
+      const sessionStatus = getSessionStatus(session);
+      const processingStatus = getProcessingStatus(session);
+      const csvStatus = session.csvUploadStatus || "";
+      const movStatus = session.movUploadStatus || "";
 
       return (
         title.toLowerCase().includes(term) ||
         id.toLowerCase().includes(term) ||
-        csvName.toLowerCase().includes(term) ||
-        movName.toLowerCase().includes(term) ||
-        status.toLowerCase().includes(term)
+        sessionStatus.toLowerCase().includes(term) ||
+        processingStatus.toLowerCase().includes(term) ||
+        csvStatus.toLowerCase().includes(term) ||
+        movStatus.toLowerCase().includes(term)
       );
     });
   }, [sessions, searchTerm]);
@@ -361,16 +202,17 @@ export default function SessionsPage() {
       setAnalyzingId(session.id);
       setError("");
 
-      const res = await fetch(
-        `${API_BASE_URL}/upload-sessions/${session.id}/analyze`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-        }
-      );
+      const res = await fetch(`${API_BASE_URL}/sessions/${session.id}/analyze`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (res.status === 401) {
+        throw new Error("Unauthorized. Please login again.");
+      }
 
       if (!res.ok) {
         console.warn("Analyze endpoint failed or not ready:", res.status);
@@ -380,6 +222,7 @@ export default function SessionsPage() {
     } catch (err) {
       console.error(err);
 
+      // 这里保留跳转，方便你展示前端 insights 页面
       navigate(`/insights/${session.id}`);
     } finally {
       setAnalyzingId(null);
@@ -389,28 +232,41 @@ export default function SessionsPage() {
   const statusClass = (status: string) => {
     const lower = status.toLowerCase();
 
-    if (
-      lower.includes("ready") ||
-      lower.includes("uploaded") ||
-      lower.includes("complete") ||
-      lower.includes("completed")
-    ) {
+    if (lower === "completed" || lower === "complete") {
       return "bg-green-100 text-green-700 border-green-200";
     }
 
-    if (
-      lower.includes("processing") ||
-      lower.includes("analyzing") ||
-      lower.includes("pending")
-    ) {
+    if (lower === "ready" || lower === "uploaded") {
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    }
+
+    if (lower === "processing") {
       return "bg-yellow-100 text-yellow-700 border-yellow-200";
     }
 
-    if (lower.includes("failed") || lower.includes("error")) {
+    if (lower === "failed" || lower === "error") {
       return "bg-red-100 text-red-700 border-red-200";
     }
 
     return "bg-purple-100 text-purple-700 border-purple-200";
+  };
+
+  const processingStatusClass = (status: string) => {
+    const lower = status.toLowerCase();
+
+    if (lower === "completed") {
+      return "text-green-600";
+    }
+
+    if (lower === "queued") {
+      return "text-yellow-600";
+    }
+
+    if (lower === "failed") {
+      return "text-red-600";
+    }
+
+    return "text-gray-500";
   };
 
   return (
@@ -452,7 +308,7 @@ export default function SessionsPage() {
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search sessions, files, or status..."
+              placeholder="Search sessions, status, or ID..."
               className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-gray-700 outline-none transition focus:border-purple-400 focus:bg-white"
             />
           </div>
@@ -493,11 +349,11 @@ export default function SessionsPage() {
           <div className="flex min-h-[300px] items-center justify-center rounded-3xl border border-dashed border-gray-300 bg-gray-50">
             <div className="text-center">
               <p className="text-xl font-semibold text-gray-700">
-                No upload sessions found
+                No sessions found
               </p>
 
               <p className="mt-2 text-gray-500">
-                Upload a CSV or MOV file to create your first boxing session.
+                Upload a CSV and MOV file to create your first boxing session.
               </p>
 
               <button
@@ -511,7 +367,8 @@ export default function SessionsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {filteredSessions.map((session) => {
-              const status = getStatus(session);
+              const sessionStatus = getSessionStatus(session);
+              const processingStatus = getProcessingStatus(session);
               const csvText = getCsvText(session);
               const movText = getMovText(session);
 
@@ -523,7 +380,7 @@ export default function SessionsPage() {
                   <div className="mb-4 flex items-start justify-between gap-4">
                     <div>
                       <h2 className="text-xl font-bold text-purple-600">
-                        {session.title || `Boxing Session Upload`}
+                        {session.title || `Session ${getShortId(session.id)}`}
                       </h2>
 
                       <p className="mt-1 text-sm text-gray-400">
@@ -533,10 +390,10 @@ export default function SessionsPage() {
 
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(
-                        status
+                        sessionStatus
                       )}`}
                     >
-                      {status}
+                      {sessionStatus}
                     </span>
                   </div>
 
@@ -566,6 +423,21 @@ export default function SessionsPage() {
                       <div>
                         <p className="font-semibold">MOV</p>
                         <p className="break-all text-gray-500">{movText}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Activity size={18} className="text-gray-400" />
+
+                      <div>
+                        <p className="font-semibold">ML Status</p>
+                        <p
+                          className={`break-all ${processingStatusClass(
+                            processingStatus
+                          )}`}
+                        >
+                          {processingStatus}
+                        </p>
                       </div>
                     </div>
 
