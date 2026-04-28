@@ -30,6 +30,7 @@ tags:
         4. Mark uploads as completed in the backend
         5. Start session analysis
         6. Poll session status and fetch results when processing is complete
+        7. If a MOV was uploaded, request a pre-signed URL to stream the annotated video
 
 components:
   securitySchemes:
@@ -63,7 +64,7 @@ components:
         email:
           type: string
           format: email
-          example: boxer@example.com
+          example: alison.test@kivomotion.com
         name:
           type: string
           example: Alison Wu
@@ -82,11 +83,11 @@ components:
         email:
           type: string
           format: email
-          example: boxer@example.com
+          example: alison.test@kivomotion.com
         password:
           type: string
           format: password
-          example: secret123
+          example: test1234
         name:
           type: string
           example: Alison Wu
@@ -100,11 +101,11 @@ components:
         email:
           type: string
           format: email
-          example: boxer@example.com
+          example: alison.test@kivomotion.com
         password:
           type: string
           format: password
-          example: secret123
+          example: test1234
 
     LoginResponse:
       type: object
@@ -548,6 +549,22 @@ components:
           format: date-time
           nullable: true
 
+    SessionVideoUrlResponse:
+      type: object
+      required:
+        - videoUrl
+        - expiresIn
+      properties:
+        videoUrl:
+          type: string
+          format: uri
+          description: Pre-signed S3 URL to stream the annotated video. Valid for `expiresIn` seconds.
+          example: https://boxing-analytics-upload-files.s3.ap-southeast-2.amazonaws.com/outputs/session-123/annotated_video.mp4?...
+        expiresIn:
+          type: integer
+          description: Number of seconds until the URL expires.
+          example: 3600
+
   responses:
     UnauthorizedError:
       description: Missing or invalid bearer token
@@ -591,8 +608,8 @@ paths:
             schema:
               $ref: '#/components/schemas/RegisterRequest'
             example:
-              email: boxer@example.com
-              password: secret123
+              email: alison.test@kivomotion.com
+              password: test1234
               name: Alison Wu
       responses:
         '201':
@@ -623,8 +640,8 @@ paths:
             schema:
               $ref: '#/components/schemas/LoginRequest'
             example:
-              email: boxer@example.com
-              password: secret123
+              email: alison.test@kivomotion.com
+              password: test1234
       responses:
         '200':
           description: Login successful
@@ -980,6 +997,51 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: Failed to load session status
+
+  /sessions/{id}/results/video:
+    get:
+      tags:
+        - Sessions
+      summary: Get a pre-signed URL to stream the annotated video
+      description: |
+        Returns a short-lived pre-signed S3 URL for the annotated output video produced by the video model.
+        Only available if a MOV file was uploaded and analysis has completed.
+        Use the URL directly in a `<video>` tag — it expires after `expiresIn` seconds.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Session identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pre-signed video URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionVideoUrlResponse'
+        '404':
+          description: Session not found or no annotated video available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: No annotated video available for this session
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          description: Failed to get video URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to get video URL
 
   /sessions/{id}/results:
     get:

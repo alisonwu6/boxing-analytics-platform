@@ -90,12 +90,22 @@ async function completeUploadSessionFile(req, res) {
   }
 }
 
+async function getSessionVideoUrl(req, res) {
+  try {
+    const payload = await sessionsService.getSessionVideoUrl(req.params.id, req.userId);
+    res.json(payload);
+  } catch (error) {
+    handleControllerError(res, error, 'Failed to get video URL');
+  }
+}
+
 module.exports = {
   getSessions,
   getSessionById,
   getSessionStatus,
   startSessionAnalysis,
   getSessionResults,
+  getSessionVideoUrl,
   createUploadSession,
   createUploadPresign,
   completeUploadSessionFile,

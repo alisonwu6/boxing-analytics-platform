@@ -136,9 +136,32 @@ async function assertObjectExists(key) {
   }
 }
 
+async function createPresignedDownload(key, expiresIn = 3600) {
+  let GetObjectCommand;
+  let getSignedUrl;
+
+  try {
+    ({ GetObjectCommand } = require('@aws-sdk/client-s3'));
+    ({ getSignedUrl } = require('@aws-sdk/s3-request-presigner'));
+  } catch {
+    throw createHttpError(500, 'AWS S3 SDK is not installed');
+  }
+
+  const client = createS3Client();
+  const command = new GetObjectCommand({
+    Bucket: getBucketName(),
+    Key: key,
+  });
+
+  const url = await getSignedUrl(client, command, { expiresIn });
+
+  return { url, expiresIn };
+}
+
 module.exports = {
   assertObjectExists,
   createHttpError,
   createPresignedUpload,
+  createPresignedDownload,
   normaliseFileType,
 };

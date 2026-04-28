@@ -3,6 +3,7 @@ const sessionsRepository = require('../repositories/sessions.repository.js');
 const {
   assertObjectExists,
   createPresignedUpload,
+  createPresignedDownload,
   normaliseFileType,
 } = require('./s3-upload.service');
 const { runSessionInference } = require('./ml-inference.service');
@@ -367,6 +368,21 @@ async function completeUploadSessionFile(id, userId, input = {}) {
   return getSessionById(id, userId);
 }
 
+async function getSessionVideoUrl(id, userId) {
+  const session = await findOwnedSession(id, userId, 'Session not found');
+
+  const results = session.results || {};
+  const annotatedVideoKey = results.artifacts?.annotatedVideoKey;
+
+  if (!annotatedVideoKey) {
+    throw createHttpError(404, 'No annotated video available for this session');
+  }
+
+  const { url, expiresIn } = await createPresignedDownload(annotatedVideoKey);
+
+  return { videoUrl: url, expiresIn };
+}
+
 module.exports = {
   getSessions,
   getSessionById,
@@ -374,6 +390,7 @@ module.exports = {
   createUploadSession,
   startSessionAnalysis,
   getSessionResults,
+  getSessionVideoUrl,
   createUploadPresign,
   completeUploadSessionFile,
   serialiseSessionSummary,

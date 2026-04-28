@@ -12,6 +12,7 @@ router.get('/sessions', requireAuth, sessionsController.getSessions);
 router.get('/sessions/:id/status', requireAuth, sessionsController.getSessionStatus);
 router.post('/sessions/:id/analyze', requireAuth, sessionsController.startSessionAnalysis);
 router.get('/sessions/:id/results', requireAuth, sessionsController.getSessionResults);
+router.get('/sessions/:id/results/video', requireAuth, sessionsController.getSessionVideoUrl);
 router.get('/sessions/:id', requireAuth, sessionsController.getSessionById);
 
 module.exports = router;
