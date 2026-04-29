@@ -23,6 +23,22 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/sessions"
+          element={
+            <ProtectedRoute>
+              <SessionsPage />
+            </ProtectedRoute>
+          }
+        />
+         <Route
+          path="/sessions/:sessionId/upload"
+          element={
+            <ProtectedRoute>
+              <UploadPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/upload"
@@ -33,14 +49,7 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/sessions"
-          element={
-            <ProtectedRoute>
-              <SessionsPage />
-            </ProtectedRoute>
-          }
-        />
+        
         <Route
           path="/insights/:sessionId"
           element={

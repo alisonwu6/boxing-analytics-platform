@@ -10,6 +10,10 @@ import {
   PlayCircle,
   AlertCircle,
   Activity,
+  Plus,
+  Pencil,
+  UploadCloud,
+  Eye,
 } from "lucide-react";
 
 const API_BASE_URL =
@@ -23,15 +27,9 @@ type Session = {
   notes?: string;
   sessionType?: string;
 
-  // Session lifecycle status:
-  // draft / ready / processing / completed / failed
   status?: string;
-
-  // ML processing status:
-  // idle / queued / completed / failed
   processingStatus?: string;
 
-  // Upload status from backend
   csvUploadStatus?: string;
   movUploadStatus?: string;
 
@@ -49,9 +47,14 @@ export default function SessionsPage() {
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
-  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const getToken = () => {
     return (
@@ -65,13 +68,31 @@ export default function SessionsPage() {
   const getAuthHeaders = (): HeadersInit => {
     const token = getToken();
 
-    if (!token) {
-      return {};
-    }
+    if (!token) return {};
 
     return {
       Authorization: `Bearer ${token}`,
     };
+  };
+
+  const readErrorText = async (res: Response) => {
+    try {
+      const text = await res.text();
+      return text || res.statusText;
+    } catch {
+      return res.statusText;
+    }
+  };
+
+  const extractSessionId = (data: any) => {
+    return (
+      data?.id ||
+      data?.sessionId ||
+      data?.session?.id ||
+      data?.data?.id ||
+      data?.data?.session?.id ||
+      ""
+    );
   };
 
   const fetchSessions = async () => {
@@ -87,13 +108,12 @@ export default function SessionsPage() {
       });
 
       if (res.status === 401) {
-        throw new Error(
-          "Unauthorized. Please login again or check your token in localStorage."
-        );
+        throw new Error("Unauthorized. Please login again.");
       }
 
       if (!res.ok) {
-        throw new Error(`Failed to fetch sessions: ${res.status}`);
+        const text = await readErrorText(res);
+        throw new Error(`Failed to fetch sessions: ${res.status} ${text}`);
       }
 
       const data = await res.json();
@@ -128,6 +148,111 @@ export default function SessionsPage() {
     fetchSessions();
   }, []);
 
+  const createSession = async () => {
+    try {
+      setCreating(true);
+      setError("");
+
+      const title = newTitle.trim() || "Untitled Boxing Session";
+
+      const res = await fetch(`${API_BASE_URL}/sessions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          title,
+          sessionType: "training",
+          notes: newNotes.trim(),
+        }),
+      });
+
+      if (res.status === 401) {
+        throw new Error("Unauthorized. Please login again.");
+      }
+
+      if (!res.ok) {
+        const text = await readErrorText(res);
+        throw new Error(`Create session failed: ${res.status} ${text}`);
+      }
+
+      const data = await res.json();
+      console.log("Create session response:", data);
+
+      const sessionId = extractSessionId(data);
+
+      if (!sessionId) {
+        throw new Error("Backend did not return session id.");
+      }
+
+      setCreateOpen(false);
+      setNewTitle("");
+      setNewNotes("");
+
+      navigate(`/sessions/${sessionId}/upload`);
+    } catch (err) {
+      console.error(err);
+
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Could not create session.");
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const updateSessionTitle = async (session: Session) => {
+    const nextTitle = window.prompt(
+      "Enter new session name:",
+      session.title || ""
+    );
+
+    if (nextTitle === null) return;
+
+    const trimmed = nextTitle.trim();
+
+    if (!trimmed) {
+      setError("Session name cannot be empty.");
+      return;
+    }
+
+    try {
+      setActionLoadingId(session.id);
+      setError("");
+
+      const res = await fetch(`${API_BASE_URL}/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          title: trimmed,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await readErrorText(res);
+        throw new Error(`Update session failed: ${res.status} ${text}`);
+      }
+
+      await fetchSessions();
+    } catch (err) {
+      console.error(err);
+
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Could not update session name.");
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const getShortId = (id: string) => {
     if (!id) return "N/A";
     return id.slice(0, 8);
@@ -147,6 +272,32 @@ export default function SessionsPage() {
 
   const hasMov = (session: Session) => {
     return session.movUploadStatus === "uploaded";
+  };
+
+  const hasAnyUploadedFile = (session: Session) => {
+    return hasCsv(session) || hasMov(session);
+  };
+
+  const canAnalyze = (session: Session) => {
+    return getSessionStatus(session) === "ready" && hasAnyUploadedFile(session);
+  };
+
+  const isProcessing = (session: Session) => {
+    const status = getSessionStatus(session);
+    const processingStatus = getProcessingStatus(session);
+
+    return (
+      status === "processing" ||
+      processingStatus === "queued" ||
+      processingStatus === "processing"
+    );
+  };
+
+  const isCompleted = (session: Session) => {
+    return (
+      getSessionStatus(session) === "completed" ||
+      getProcessingStatus(session) === "completed"
+    );
   };
 
   const getCsvText = (session: Session) => {
@@ -199,7 +350,7 @@ export default function SessionsPage() {
 
   const handleAnalyze = async (session: Session) => {
     try {
-      setAnalyzingId(session.id);
+      setActionLoadingId(session.id);
       setError("");
 
       const res = await fetch(`${API_BASE_URL}/sessions/${session.id}/analyze`, {
@@ -215,17 +366,21 @@ export default function SessionsPage() {
       }
 
       if (!res.ok) {
-        console.warn("Analyze endpoint failed or not ready:", res.status);
+        const text = await readErrorText(res);
+        throw new Error(`Could not start analysis: ${res.status} ${text}`);
       }
 
       navigate(`/insights/${session.id}`);
     } catch (err) {
       console.error(err);
 
-      // 这里保留跳转，方便你展示前端 insights 页面
-      navigate(`/insights/${session.id}`);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Could not start analysis.");
+      }
     } finally {
-      setAnalyzingId(null);
+      setActionLoadingId(null);
     }
   };
 
@@ -240,7 +395,7 @@ export default function SessionsPage() {
       return "bg-blue-100 text-blue-700 border-blue-200";
     }
 
-    if (lower === "processing") {
+    if (lower === "processing" || lower === "queued") {
       return "bg-yellow-100 text-yellow-700 border-yellow-200";
     }
 
@@ -249,24 +404,6 @@ export default function SessionsPage() {
     }
 
     return "bg-purple-100 text-purple-700 border-purple-200";
-  };
-
-  const processingStatusClass = (status: string) => {
-    const lower = status.toLowerCase();
-
-    if (lower === "completed") {
-      return "text-green-600";
-    }
-
-    if (lower === "queued") {
-      return "text-yellow-600";
-    }
-
-    if (lower === "failed") {
-      return "text-red-600";
-    }
-
-    return "text-gray-500";
   };
 
   return (
@@ -294,7 +431,8 @@ export default function SessionsPage() {
           </h1>
 
           <p className="mt-4 text-lg text-gray-500">
-            Select a saved boxing session for analysis
+            Create a session first, then upload CSV or MOV files into that
+            session.
           </p>
         </div>
 
@@ -313,7 +451,7 @@ export default function SessionsPage() {
             />
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={fetchSessions}
               className="flex items-center gap-2 rounded-2xl border border-purple-200 bg-white px-5 py-3 font-semibold text-purple-600 transition hover:bg-purple-50"
@@ -323,10 +461,11 @@ export default function SessionsPage() {
             </button>
 
             <button
-              onClick={() => navigate("/upload")}
-              className="rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700"
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700"
             >
-              Upload New
+              <Plus size={18} />
+              Create Session
             </button>
           </div>
         </div>
@@ -334,7 +473,77 @@ export default function SessionsPage() {
         {error && (
           <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
             <AlertCircle size={20} />
-            <span>{error}</span>
+            <span className="break-words">{error}</span>
+          </div>
+        )}
+
+        {createOpen && (
+          <div className="mb-8 rounded-3xl border border-purple-100 bg-purple-50 p-6">
+            <h2 className="text-2xl font-bold text-purple-600">
+              Create New Session
+            </h2>
+
+            <p className="mt-2 text-gray-600">
+              Create a session first. After creation, you can upload CSV, MOV,
+              or both files into this session.
+            </p>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-semibold text-gray-600">
+                  Session name
+                </label>
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="e.g. JackBag Test Session"
+                  className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-700 outline-none focus:border-purple-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-gray-600">
+                  Notes
+                </label>
+                <input
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  placeholder="Optional notes"
+                  className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-700 outline-none focus:border-purple-400"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                onClick={createSession}
+                disabled={creating}
+                className="flex items-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {creating ? (
+                  <>
+                    <RefreshCw size={18} className="animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={18} />
+                    Create and Upload
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setCreateOpen(false);
+                  setNewTitle("");
+                  setNewNotes("");
+                }}
+                className="rounded-2xl border border-gray-200 bg-white px-5 py-3 font-semibold text-gray-600 transition hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
@@ -353,14 +562,14 @@ export default function SessionsPage() {
               </p>
 
               <p className="mt-2 text-gray-500">
-                Upload a CSV and MOV file to create your first boxing session.
+                Create a session first, then upload boxing files into it.
               </p>
 
               <button
-                onClick={() => navigate("/upload")}
+                onClick={() => setCreateOpen(true)}
                 className="mt-6 rounded-2xl bg-purple-600 px-6 py-3 font-semibold text-white transition hover:bg-purple-700"
               >
-                Go to Upload
+                Create Session
               </button>
             </div>
           </div>
@@ -371,6 +580,7 @@ export default function SessionsPage() {
               const processingStatus = getProcessingStatus(session);
               const csvText = getCsvText(session);
               const movText = getMovText(session);
+              const busy = actionLoadingId === session.id;
 
               return (
                 <div
@@ -431,11 +641,7 @@ export default function SessionsPage() {
 
                       <div>
                         <p className="font-semibold">ML Status</p>
-                        <p
-                          className={`break-all ${processingStatusClass(
-                            processingStatus
-                          )}`}
-                        >
+                        <p className="break-all text-gray-500">
                           {processingStatus}
                         </p>
                       </div>
@@ -445,32 +651,72 @@ export default function SessionsPage() {
                       <p className="font-semibold">Created</p>
                       <p className="text-gray-500">{formatDate(session)}</p>
                     </div>
-
-                    {session.sessionType && (
-                      <div>
-                        <p className="font-semibold">Type</p>
-                        <p className="text-gray-500">{session.sessionType}</p>
-                      </div>
-                    )}
                   </div>
 
-                  <button
-                    onClick={() => handleAnalyze(session)}
-                    disabled={analyzingId === session.id}
-                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {analyzingId === session.id ? (
-                      <>
+                  <div className="mt-6 grid grid-cols-1 gap-3">
+                    {isCompleted(session) ? (
+                      <button
+                        onClick={() => navigate(`/insights/${session.id}`)}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700"
+                      >
+                        <Eye size={18} />
+                        View Insights
+                      </button>
+                    ) : isProcessing(session) ? (
+                      <button
+                        disabled
+                        className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-yellow-100 px-5 py-3 font-semibold text-yellow-700"
+                      >
                         <RefreshCw size={18} className="animate-spin" />
-                        Preparing...
-                      </>
+                        Processing...
+                      </button>
+                    ) : canAnalyze(session) ? (
+                      <button
+                        onClick={() => handleAnalyze(session)}
+                        disabled={busy}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {busy ? (
+                          <>
+                            <RefreshCw size={18} className="animate-spin" />
+                            Starting...
+                          </>
+                        ) : (
+                          <>
+                            <PlayCircle size={18} />
+                            Analyze Session
+                          </>
+                        )}
+                      </button>
                     ) : (
-                      <>
-                        <PlayCircle size={19} />
-                        Analyze Session
-                      </>
+                      <button
+                        onClick={() => navigate(`/sessions/${session.id}/upload`)}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700"
+                      >
+                        <UploadCloud size={18} />
+                        Open Upload
+                      </button>
                     )}
-                  </button>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => navigate(`/sessions/${session.id}/upload`)}
+                        className="flex items-center justify-center gap-2 rounded-2xl border border-purple-200 bg-white px-4 py-3 font-semibold text-purple-600 transition hover:bg-purple-50"
+                      >
+                        <UploadCloud size={17} />
+                        Files
+                      </button>
+
+                      <button
+                        onClick={() => updateSessionTitle(session)}
+                        disabled={busy}
+                        className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Pencil size={17} />
+                        Rename
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })}
