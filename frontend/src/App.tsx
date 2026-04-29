@@ -5,7 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import UploadPage from "./pages/UploadPage";
 import SessionsPage from "./pages/SessionsPage";
-import InsightsDemoPage from "./pages/InsightsDemoPage";
+import InsightsPage from "./pages/InsightsPage";
 
 export default function App() {
   return (
@@ -42,10 +42,10 @@ export default function App() {
           }
         />
         <Route
-          path="/insights-demo"
+          path="/insights/:sessionId"
           element={
             <ProtectedRoute>
-              <InsightsDemoPage />
+              <InsightsPage />
             </ProtectedRoute>
           }
         />
