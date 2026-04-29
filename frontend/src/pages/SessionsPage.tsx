@@ -11,7 +11,6 @@ import {
   AlertCircle,
   Activity,
   Plus,
-  Pencil,
   UploadCloud,
   Eye,
 } from "lucide-react";
@@ -88,6 +87,7 @@ export default function SessionsPage() {
     return (
       data?.id ||
       data?.sessionId ||
+      data?.uploadSessionId ||
       data?.session?.id ||
       data?.data?.id ||
       data?.data?.session?.id ||
@@ -154,8 +154,10 @@ export default function SessionsPage() {
       setError("");
 
       const title = newTitle.trim() || "Untitled Boxing Session";
+      const start = new Date();
+      const end = new Date(start.getTime() + 30 * 60 * 1000);
 
-      const res = await fetch(`${API_BASE_URL}/sessions`, {
+      const res = await fetch(`${API_BASE_URL}/upload-sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -163,8 +165,11 @@ export default function SessionsPage() {
         },
         body: JSON.stringify({
           title,
-          sessionType: "training",
           notes: newNotes.trim(),
+          sessionType: "training",
+          sessionDate: start.toISOString(),
+          sessionStartAt: start.toISOString(),
+          sessionEndAt: end.toISOString(),
         }),
       });
 
@@ -178,7 +183,8 @@ export default function SessionsPage() {
       }
 
       const data = await res.json();
-      console.log("Create session response:", data);
+
+      console.log("Create upload session response:", data);
 
       const sessionId = extractSessionId(data);
 
@@ -201,55 +207,6 @@ export default function SessionsPage() {
       }
     } finally {
       setCreating(false);
-    }
-  };
-
-  const updateSessionTitle = async (session: Session) => {
-    const nextTitle = window.prompt(
-      "Enter new session name:",
-      session.title || ""
-    );
-
-    if (nextTitle === null) return;
-
-    const trimmed = nextTitle.trim();
-
-    if (!trimmed) {
-      setError("Session name cannot be empty.");
-      return;
-    }
-
-    try {
-      setActionLoadingId(session.id);
-      setError("");
-
-      const res = await fetch(`${API_BASE_URL}/sessions/${session.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({
-          title: trimmed,
-        }),
-      });
-
-      if (!res.ok) {
-        const text = await readErrorText(res);
-        throw new Error(`Update session failed: ${res.status} ${text}`);
-      }
-
-      await fetchSessions();
-    } catch (err) {
-      console.error(err);
-
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Could not update session name.");
-      }
-    } finally {
-      setActionLoadingId(null);
     }
   };
 
@@ -289,6 +246,8 @@ export default function SessionsPage() {
     return (
       status === "processing" ||
       processingStatus === "queued" ||
+      processingStatus === "preprocessing" ||
+      processingStatus === "inferencing" ||
       processingStatus === "processing"
     );
   };
@@ -301,11 +260,11 @@ export default function SessionsPage() {
   };
 
   const getCsvText = (session: Session) => {
-    return hasCsv(session) ? "Uploaded" : "Not uploaded";
+    return hasCsv(session) ? "Uploaded" : "Missing";
   };
 
   const getMovText = (session: Session) => {
-    return hasMov(session) ? "Uploaded" : "Not uploaded";
+    return hasMov(session) ? "Uploaded" : "Missing";
   };
 
   const formatDate = (session: Session) => {
@@ -395,7 +354,12 @@ export default function SessionsPage() {
       return "bg-blue-100 text-blue-700 border-blue-200";
     }
 
-    if (lower === "processing" || lower === "queued") {
+    if (
+      lower === "processing" ||
+      lower === "queued" ||
+      lower === "preprocessing" ||
+      lower === "inferencing"
+    ) {
       return "bg-yellow-100 text-yellow-700 border-yellow-200";
     }
 
@@ -419,7 +383,7 @@ export default function SessionsPage() {
           </button>
 
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/home")}
             className="absolute right-0 top-2 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-purple-600 shadow-sm transition hover:bg-purple-50"
             aria-label="Go home"
           >
@@ -690,7 +654,9 @@ export default function SessionsPage() {
                       </button>
                     ) : (
                       <button
-                        onClick={() => navigate(`/sessions/${session.id}/upload`)}
+                        onClick={() =>
+                          navigate(`/sessions/${session.id}/upload`)
+                        }
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700"
                       >
                         <UploadCloud size={18} />
@@ -698,24 +664,13 @@ export default function SessionsPage() {
                       </button>
                     )}
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => navigate(`/sessions/${session.id}/upload`)}
-                        className="flex items-center justify-center gap-2 rounded-2xl border border-purple-200 bg-white px-4 py-3 font-semibold text-purple-600 transition hover:bg-purple-50"
-                      >
-                        <UploadCloud size={17} />
-                        Files
-                      </button>
-
-                      <button
-                        onClick={() => updateSessionTitle(session)}
-                        disabled={busy}
-                        className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <Pencil size={17} />
-                        Rename
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => navigate(`/sessions/${session.id}/upload`)}
+                      className="flex items-center justify-center gap-2 rounded-2xl border border-purple-200 bg-white px-4 py-3 font-semibold text-purple-600 transition hover:bg-purple-50"
+                    >
+                      <UploadCloud size={17} />
+                      Manage Files
+                    </button>
                   </div>
                 </div>
               );

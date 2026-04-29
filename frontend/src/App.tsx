@@ -12,6 +12,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
+
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
@@ -23,6 +24,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/sessions"
           element={
@@ -31,7 +33,8 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-         <Route
+
+        <Route
           path="/sessions/:sessionId/upload"
           element={
             <ProtectedRoute>
@@ -40,16 +43,16 @@ export default function App() {
           }
         />
 
+        {/* Old upload route: redirect to Sessions because upload now belongs inside a session */}
         <Route
           path="/upload"
           element={
             <ProtectedRoute>
-              <UploadPage />
+              <Navigate to="/sessions" replace />
             </ProtectedRoute>
           }
         />
 
-        
         <Route
           path="/insights/:sessionId"
           element={

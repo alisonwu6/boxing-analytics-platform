@@ -10,7 +10,6 @@ import {
   AlertCircle,
   RefreshCw,
   Activity,
-  Pencil,
   PlayCircle,
   Eye,
 } from "lucide-react";
@@ -64,10 +63,6 @@ export default function UploadPage() {
 
   const [pageLoading, setPageLoading] = useState(true);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
-  const [savingTitle, setSavingTitle] = useState(false);
-
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleInput, setTitleInput] = useState("");
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -123,17 +118,17 @@ export default function UploadPage() {
     );
   };
 
-  const extractObjectKey = (data: any) => {
+  const extractKey = (data: any) => {
     return (
-      data?.objectKey ||
       data?.key ||
+      data?.objectKey ||
       data?.s3Key ||
       data?.fileKey ||
-      data?.data?.objectKey ||
       data?.data?.key ||
+      data?.data?.objectKey ||
       data?.data?.s3Key ||
-      data?.upload?.objectKey ||
       data?.upload?.key ||
+      data?.upload?.objectKey ||
       ""
     );
   };
@@ -186,7 +181,6 @@ export default function UploadPage() {
       const sessionData = data?.data || data?.session || data;
 
       setSession(sessionData);
-      setTitleInput(sessionData?.title || "");
     } catch (err) {
       console.error(err);
 
@@ -205,75 +199,24 @@ export default function UploadPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  const saveTitle = async () => {
-    if (!sessionId) return;
+  const createPresignedUrl = async (file: File, fileType: FileType) => {
+    const contentType = getFileContentType(file, fileType);
 
-    const nextTitle = titleInput.trim();
-
-    if (!nextTitle) {
-      setError("Session name cannot be empty.");
-      return;
-    }
-
-    try {
-      setSavingTitle(true);
-      setError("");
-      setMessage("");
-
-      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
-        method: "PATCH",
+    const res = await fetch(
+      `${API_BASE_URL}/upload-sessions/${sessionId}/presign`,
+      {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
         body: JSON.stringify({
-          title: nextTitle,
+          fileType,
+          contentType,
+          originalFileName: file.name,
         }),
-      });
-
-      if (!res.ok) {
-        const text = await readErrorText(res);
-        throw new Error(`Update session name failed: ${res.status} ${text}`);
       }
-
-      setMessage("Session name updated.");
-      setEditingTitle(false);
-
-      await loadSession();
-    } catch (err) {
-      console.error(err);
-
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Could not update session name.");
-      }
-    } finally {
-      setSavingTitle(false);
-    }
-  };
-
-  const createPresignedUrl = async (
-    file: File,
-    fileType: FileType
-  ) => {
-    const contentType = getFileContentType(file, fileType);
-
-    const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/presign`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify({
-        fileType,
-        fileName: file.name,
-        originalName: file.name,
-        contentType,
-        mimeType: contentType,
-        size: file.size,
-      }),
-    });
+    );
 
     if (res.status === 401) {
       throw new Error("Unauthorized. Please login again.");
@@ -314,21 +257,21 @@ export default function UploadPage() {
     }
   };
 
-  const completeUpload = async (
-    fileType: FileType,
-    objectKey: string
-  ) => {
-    const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/complete`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify({
-        fileType,
-        objectKey,
-      }),
-    });
+  const completeUpload = async (fileType: FileType, key: string) => {
+    const res = await fetch(
+      `${API_BASE_URL}/upload-sessions/${sessionId}/complete`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          fileType,
+          key,
+        }),
+      }
+    );
 
     if (res.status === 401) {
       throw new Error("Unauthorized. Please login again.");
@@ -362,7 +305,7 @@ export default function UploadPage() {
       const presignData = await createPresignedUrl(file, fileType);
 
       const uploadUrl = extractUploadUrl(presignData);
-      const objectKey = extractObjectKey(presignData);
+      const key = extractKey(presignData);
 
       const fallbackContentType = getFileContentType(file, fileType);
       const returnedContentType = extractReturnedContentType(
@@ -374,14 +317,14 @@ export default function UploadPage() {
         throw new Error("Backend did not return uploadUrl.");
       }
 
-      if (!objectKey) {
+      if (!key) {
         throw new Error(
-          "Backend did not return objectKey/key. Complete upload requires the same object key."
+          "Backend did not return key. Complete upload requires the same key from presign response."
         );
       }
 
       console.log(`${fileType} uploadUrl:`, uploadUrl);
-      console.log(`${fileType} objectKey:`, objectKey);
+      console.log(`${fileType} key:`, key);
       console.log(`${fileType} contentType:`, returnedContentType);
 
       setStep("uploading-s3");
@@ -390,12 +333,12 @@ export default function UploadPage() {
 
       setStep("completing");
 
-      await completeUpload(fileType, objectKey);
+      await completeUpload(fileType, key);
 
       setStep("completed");
 
       setMessage(
-        `${fileType.toUpperCase()} uploaded successfully. Session status will refresh now.`
+        `${fileType.toUpperCase()} uploaded successfully. Session status has been refreshed.`
       );
 
       await loadSession();
@@ -472,6 +415,8 @@ export default function UploadPage() {
     return (
       status === "processing" ||
       processingStatus === "queued" ||
+      processingStatus === "preprocessing" ||
+      processingStatus === "inferencing" ||
       processingStatus === "processing"
     );
   };
@@ -554,7 +499,12 @@ export default function UploadPage() {
       return "bg-blue-100 text-blue-700 border-blue-200";
     }
 
-    if (lower === "processing" || lower === "queued") {
+    if (
+      lower === "processing" ||
+      lower === "queued" ||
+      lower === "preprocessing" ||
+      lower === "inferencing"
+    ) {
       return "bg-yellow-100 text-yellow-700 border-yellow-200";
     }
 
@@ -601,7 +551,7 @@ export default function UploadPage() {
           </button>
 
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/home")}
             className="absolute right-0 top-2 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-purple-600 shadow-sm transition hover:bg-purple-50"
             aria-label="Go home"
           >
@@ -636,47 +586,9 @@ export default function UploadPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-500">Session</p>
 
-              {editingTitle ? (
-                <div className="mt-2 flex flex-col gap-3 md:flex-row">
-                  <input
-                    value={titleInput}
-                    onChange={(e) => setTitleInput(e.target.value)}
-                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-700 outline-none focus:border-purple-400"
-                  />
-
-                  <button
-                    onClick={saveTitle}
-                    disabled={savingTitle}
-                    className="rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {savingTitle ? "Saving..." : "Save"}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setEditingTitle(false);
-                      setTitleInput(session?.title || "");
-                    }}
-                    className="rounded-2xl border border-gray-200 bg-white px-5 py-3 font-semibold text-gray-600 transition hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <h2 className="break-all text-2xl font-bold text-purple-600">
-                    {session?.title || `Session ${sessionId.slice(0, 8)}`}
-                  </h2>
-
-                  <button
-                    onClick={() => setEditingTitle(true)}
-                    className="flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-3 py-2 text-sm font-semibold text-purple-600 transition hover:bg-purple-50"
-                  >
-                    <Pencil size={15} />
-                    Rename
-                  </button>
-                </div>
-              )}
+              <h2 className="mt-2 break-all text-2xl font-bold text-purple-600">
+                {session?.title || `Session ${sessionId.slice(0, 8)}`}
+              </h2>
 
               <p className="mt-2 break-all text-sm text-gray-500">
                 ID: {sessionId}
@@ -715,7 +627,7 @@ export default function UploadPage() {
                     hasCsv() ? "text-green-600" : "text-gray-500"
                   }`}
                 >
-                  {hasCsv() ? "Uploaded" : "Not uploaded"}
+                  {hasCsv() ? "Uploaded" : "Missing"}
                 </p>
               </div>
 
@@ -726,7 +638,7 @@ export default function UploadPage() {
                     hasMov() ? "text-green-600" : "text-gray-500"
                   }`}
                 >
-                  {hasMov() ? "Uploaded" : "Not uploaded"}
+                  {hasMov() ? "Uploaded" : "Missing"}
                 </p>
               </div>
             </div>
@@ -979,12 +891,11 @@ export default function UploadPage() {
         </div>
 
         <div className="mt-6 rounded-2xl border border-purple-100 bg-purple-50 p-5 text-sm text-purple-700">
-          <p className="font-semibold">Current flow</p>
+          <p className="font-semibold">Current API flow</p>
           <p className="mt-1">
-            Create session → open session upload page → upload CSV or MOV →
-            complete upload with objectKey → backend updates status to ready →
-            Analyze button becomes enabled → status changes to processing after
-            analysis starts.
+            POST /upload-sessions → POST /upload-sessions/:id/presign → PUT to
+            S3 → POST /upload-sessions/:id/complete with key → backend updates
+            session status → POST /sessions/:id/analyze.
           </p>
         </div>
       </div>
