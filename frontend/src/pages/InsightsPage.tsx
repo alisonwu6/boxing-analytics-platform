@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -26,6 +26,7 @@ type Session = {
 
   status?: string;
   processingStatus?: string;
+  canFetchResults?: boolean;
 
   csvUploadStatus?: string;
   movUploadStatus?: string;
@@ -53,7 +54,7 @@ export default function InsightsPage() {
   const navigate = useNavigate();
   const params = useParams();
 
-  const sessionId = params.sessionId || params.id;
+  const sessionId = params.sessionId || params.id || "";
 
   const [session, setSession] = useState<Session | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
@@ -65,8 +66,10 @@ export default function InsightsPage() {
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
 
   const [error, setError] = useState("");
-  const [videoError, setVideoError] = useState("");
-  const [insightError, setInsightError] = useState("");
+  const [videoMessage, setVideoMessage] = useState("");
+  const [insightMessage, setInsightMessage] = useState("");
+
+  const pollingRef = useRef<number | null>(null);
 
   const getToken = () => {
     return (
@@ -87,6 +90,15 @@ export default function InsightsPage() {
     };
   };
 
+  const readErrorText = async (res: Response) => {
+    try {
+      const text = await res.text();
+      return text || res.statusText;
+    } catch {
+      return res.statusText;
+    }
+  };
+
   const formatDate = (value?: string) => {
     if (!value) return "N/A";
 
@@ -97,26 +109,93 @@ export default function InsightsPage() {
     return date.toLocaleString();
   };
 
-  const statusClass = (status?: string) => {
-    const value = (status || "").toLowerCase();
+  const normaliseSessionResponse = (
+    data: any,
+    previousSession?: Session | null
+  ): Session => {
+    const base =
+      data?.data?.session ||
+      data?.session ||
+      data?.data ||
+      data?.result ||
+      data ||
+      {};
 
-    if (value === "completed" || value === "complete") {
-      return "bg-green-100 text-green-700 border-green-200";
-    }
+    const dataWrapper = data?.data || data || {};
 
-    if (value === "ready" || value === "uploaded") {
-      return "bg-blue-100 text-blue-700 border-blue-200";
-    }
+    return {
+      ...(previousSession || {}),
+      ...base,
 
-    if (value === "processing" || value === "queued") {
-      return "bg-yellow-100 text-yellow-700 border-yellow-200";
-    }
+      id:
+        base.id ||
+        dataWrapper.id ||
+        previousSession?.id ||
+        sessionId,
 
-    if (value === "failed" || value === "error") {
-      return "bg-red-100 text-red-700 border-red-200";
-    }
+      status:
+        base.status ||
+        dataWrapper.status ||
+        previousSession?.status,
 
-    return "bg-purple-100 text-purple-700 border-purple-200";
+      processingStatus:
+        base.processingStatus ||
+        dataWrapper.processingStatus ||
+        previousSession?.processingStatus,
+
+      canFetchResults:
+        base.canFetchResults ??
+        dataWrapper.canFetchResults ??
+        previousSession?.canFetchResults,
+
+      csvUploadStatus:
+        base.csvUploadStatus ||
+        dataWrapper.csvUploadStatus ||
+        previousSession?.csvUploadStatus,
+
+      movUploadStatus:
+        base.movUploadStatus ||
+        dataWrapper.movUploadStatus ||
+        previousSession?.movUploadStatus,
+    };
+  };
+
+  const isAnalysisFinished = (targetSession: Session | null) => {
+    if (!targetSession) return false;
+
+    return (
+      targetSession.canFetchResults === true ||
+      targetSession.status === "completed" ||
+      targetSession.processingStatus === "completed"
+    );
+  };
+
+  const isAnalysisFailed = (targetSession: Session | null) => {
+    if (!targetSession) return false;
+
+    return (
+      targetSession.status === "failed" ||
+      targetSession.processingStatus === "failed"
+    );
+  };
+
+  const isAnalysisRunning = (targetSession: Session | null) => {
+    if (!targetSession) return false;
+
+    const processingStatus = targetSession.processingStatus || "";
+    const status = targetSession.status || "";
+
+    return (
+      status === "processing" ||
+      processingStatus === "queued" ||
+      processingStatus === "preprocessing" ||
+      processingStatus === "inferencing" ||
+      processingStatus === "processing"
+    );
+  };
+
+  const hasMovUploaded = (targetSession: Session | null) => {
+    return targetSession?.movUploadStatus === "uploaded";
   };
 
   const getVideoUrlFromResponse = (data: any) => {
@@ -129,6 +208,8 @@ export default function InsightsPage() {
       data?.data?.videoUrl ||
       data?.data?.url ||
       data?.data?.presignedUrl ||
+      data?.result?.videoUrl ||
+      data?.result?.url ||
       ""
     );
   };
@@ -141,6 +222,7 @@ export default function InsightsPage() {
         source.totalPunches ||
         source.total_punches ||
         source.metrics?.totalPunches ||
+        source.metrics?.total_punches ||
         source.summary?.totalPunches ||
         "N/A",
 
@@ -148,6 +230,7 @@ export default function InsightsPage() {
         source.dominantPunch ||
         source.dominant_punch ||
         source.metrics?.dominantPunch ||
+        source.metrics?.dominant_punch ||
         source.summary?.dominantPunch ||
         "N/A",
 
@@ -155,6 +238,7 @@ export default function InsightsPage() {
         source.averageSpeed ||
         source.average_speed ||
         source.metrics?.averageSpeed ||
+        source.metrics?.average_speed ||
         source.summary?.averageSpeed ||
         "N/A",
 
@@ -162,6 +246,7 @@ export default function InsightsPage() {
         source.peakPower ||
         source.peak_power ||
         source.metrics?.peakPower ||
+        source.metrics?.peak_power ||
         source.summary?.peakPower ||
         "N/A",
 
@@ -169,6 +254,7 @@ export default function InsightsPage() {
         source.accuracyScore ||
         source.accuracy_score ||
         source.metrics?.accuracyScore ||
+        source.metrics?.accuracy_score ||
         source.summary?.accuracyScore ||
         "N/A",
 
@@ -176,6 +262,7 @@ export default function InsightsPage() {
         source.consistencyScore ||
         source.consistency_score ||
         source.metrics?.consistencyScore ||
+        source.metrics?.consistency_score ||
         source.summary?.consistencyScore ||
         "N/A",
 
@@ -185,22 +272,22 @@ export default function InsightsPage() {
         source.feedbackSummary ||
         source.feedback_summary ||
         source.summary ||
-        "The analysis results are not fully available yet. Once ML processing is completed, this section will show the session summary, punch patterns, and improvement feedback.",
+        "Analysis results are not available yet. Once processing is completed, this section will show the session summary, punch patterns, and improvement feedback.",
 
       recommendations:
         source.recommendations ||
         source.feedback ||
         source.suggestions ||
         [
-          "Run the analysis first and wait until ML Status becomes completed.",
-          "Refresh the video section after the annotated video has been generated.",
-          "Use the annotated video to review punch timing, body rotation, and recovery movement.",
+          "Wait until ML Status becomes completed.",
+          "Refresh results after processing is completed.",
+          "Use the annotated video and insight metrics to review punch timing, body rotation, and recovery movement.",
         ],
     };
   };
 
-  const loadSession = async () => {
-    if (!sessionId) return;
+  const loadSessionDetail = async () => {
+    if (!sessionId) return null;
 
     try {
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
@@ -212,30 +299,87 @@ export default function InsightsPage() {
 
       if (res.status === 401) {
         setError("Unauthorized. Please login again.");
-        return;
+        return null;
       }
 
       if (!res.ok) {
         console.warn("Session detail endpoint failed:", res.status);
-        return;
+        return null;
       }
 
       const data = await res.json();
-
       console.log("Session detail response:", data);
 
-      setSession(data?.data || data?.session || data);
+      const sessionData = normaliseSessionResponse(data, session);
+
+      setSession(sessionData);
+
+      return sessionData;
     } catch (err) {
       console.warn("Could not load session detail:", err);
+      return null;
     }
   };
 
-  const loadAnnotatedVideo = async () => {
+  const loadSessionStatus = async (previous?: Session | null) => {
+    if (!sessionId) return null;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/status`, {
+        method: "GET",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (res.status === 401) {
+        setError("Unauthorized. Please login again.");
+        return previous || null;
+      }
+
+      if (!res.ok) {
+        console.warn("Session status endpoint failed:", res.status);
+        return previous || null;
+      }
+
+      const data = await res.json();
+      console.log("Session status response:", data);
+
+      const sessionData = normaliseSessionResponse(data, previous || session);
+
+      setSession(sessionData);
+
+      return sessionData;
+    } catch (err) {
+      console.warn("Could not load session status:", err);
+      return previous || null;
+    }
+  };
+
+  const loadAnnotatedVideo = async (targetSession?: Session | null) => {
     if (!sessionId) return;
+
+    const currentSession = targetSession || session;
+
+    if (!hasMovUploaded(currentSession)) {
+      setVideoUrl("");
+      setVideoMessage(
+        "No MOV file was uploaded for this session, so annotated video is not available."
+      );
+      return;
+    }
+
+    if (!isAnalysisFinished(currentSession)) {
+      setVideoUrl("");
+      setVideoMessage(
+        "Annotated video will appear after ML processing is completed."
+      );
+      return;
+    }
 
     try {
       setVideoLoading(true);
-      setVideoError("");
+      setVideoMessage("");
 
       const res = await fetch(
         `${API_BASE_URL}/sessions/${sessionId}/results/video`,
@@ -249,15 +393,15 @@ export default function InsightsPage() {
 
       if (res.status === 404) {
         setVideoUrl("");
-        setVideoError(
-          "Annotated video is not ready yet. Run analysis first, then refresh after processing is completed."
+        setVideoMessage(
+          "Annotated video is not ready yet. It may still be uploading or generating."
         );
         return;
       }
 
       if (res.status === 409) {
         setVideoUrl("");
-        setVideoError(
+        setVideoMessage(
           "Analysis is still processing. The annotated video will be available after ML processing is completed."
         );
         return;
@@ -265,25 +409,25 @@ export default function InsightsPage() {
 
       if (res.status === 401) {
         setVideoUrl("");
-        setVideoError("Unauthorized. Please login again.");
+        setVideoMessage("Unauthorized. Please login again.");
         return;
       }
 
       if (!res.ok) {
+        const text = await readErrorText(res);
         setVideoUrl("");
-        setVideoError(`Failed to load annotated video: ${res.status}`);
+        setVideoMessage(`Failed to load annotated video: ${res.status} ${text}`);
         return;
       }
 
       const data = await res.json();
-
       console.log("Annotated video response:", data);
 
       const url = getVideoUrlFromResponse(data);
 
       if (!url) {
         setVideoUrl("");
-        setVideoError("Backend did not return a video URL.");
+        setVideoMessage("Backend did not return a video URL.");
         return;
       }
 
@@ -291,18 +435,28 @@ export default function InsightsPage() {
     } catch (err) {
       console.warn("Annotated video not ready:", err);
       setVideoUrl("");
-      setVideoError("Could not load annotated video.");
+      setVideoMessage("Could not load annotated video.");
     } finally {
       setVideoLoading(false);
     }
   };
 
-  const loadInsights = async () => {
+  const loadInsights = async (targetSession?: Session | null) => {
     if (!sessionId) return;
+
+    const currentSession = targetSession || session;
+
+    if (!isAnalysisFinished(currentSession)) {
+      setInsightMessage(
+        "Analysis is still processing. Results will appear after ML processing is completed."
+      );
+      setInsights(normaliseInsights({}));
+      return;
+    }
 
     try {
       setInsightLoading(true);
-      setInsightError("");
+      setInsightMessage("");
 
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/results`, {
         method: "GET",
@@ -312,13 +466,13 @@ export default function InsightsPage() {
       });
 
       if (res.status === 404) {
-        setInsightError("Insight results are not ready yet. Please run analysis first.");
+        setInsightMessage("Insight results are not ready yet.");
         setInsights(normaliseInsights({}));
         return;
       }
 
       if (res.status === 409) {
-        setInsightError(
+        setInsightMessage(
           "Analysis is still processing. Results will appear after ML processing is completed."
         );
         setInsights(normaliseInsights({}));
@@ -326,37 +480,113 @@ export default function InsightsPage() {
       }
 
       if (res.status === 401) {
-        setInsightError("Unauthorized. Please login again.");
+        setInsightMessage("Unauthorized. Please login again.");
         setInsights(normaliseInsights({}));
         return;
       }
 
       if (!res.ok) {
-        setInsightError(`Failed to load insight results: ${res.status}`);
+        const text = await readErrorText(res);
+        setInsightMessage(`Failed to load insight results: ${res.status} ${text}`);
         setInsights(normaliseInsights({}));
         return;
       }
 
       const data = await res.json();
-
       console.log("Insight results response:", data);
 
       setInsights(normaliseInsights(data));
     } catch (err) {
       console.warn("Insight results not ready:", err);
-      setInsightError("Could not load insight results.");
+      setInsightMessage("Could not load insight results.");
       setInsights(normaliseInsights({}));
     } finally {
       setInsightLoading(false);
     }
   };
 
+  const loadResultsIfReady = async (targetSession: Session | null) => {
+    if (!targetSession) return;
+
+    if (isAnalysisFinished(targetSession)) {
+      await Promise.all([
+        loadInsights(targetSession),
+        loadAnnotatedVideo(targetSession),
+      ]);
+      return;
+    }
+
+    if (isAnalysisFailed(targetSession)) {
+      setInsightMessage("Analysis failed. Please check the uploaded files or rerun analysis.");
+      setVideoMessage("Analysis failed, so annotated video is not available.");
+      setInsights(normaliseInsights({}));
+      return;
+    }
+
+    setInsightMessage(
+      "Analysis is still processing. Results will appear after ML processing is completed."
+    );
+
+    if (hasMovUploaded(targetSession)) {
+      setVideoMessage(
+        "Annotated video will appear after ML processing is completed."
+      );
+    } else {
+      setVideoMessage(
+        "No MOV file was uploaded for this session, so annotated video is not available."
+      );
+    }
+
+    setInsights(normaliseInsights({}));
+  };
+
+  const clearPolling = () => {
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const startPolling = () => {
+    clearPolling();
+
+    pollingRef.current = window.setInterval(async () => {
+      const currentSession = await loadSessionStatus(session);
+
+      if (!currentSession) return;
+
+      if (isAnalysisFinished(currentSession)) {
+        clearPolling();
+        await loadResultsIfReady(currentSession);
+      }
+
+      if (isAnalysisFailed(currentSession)) {
+        clearPolling();
+        await loadResultsIfReady(currentSession);
+      }
+    }, 5000);
+  };
+
   const loadPage = async () => {
     try {
       setPageLoading(true);
       setError("");
+      setVideoMessage("");
+      setInsightMessage("");
 
-      await Promise.all([loadSession(), loadAnnotatedVideo(), loadInsights()]);
+      const detail = await loadSessionDetail();
+      const status = await loadSessionStatus(detail);
+      const currentSession = status || detail;
+
+      await loadResultsIfReady(currentSession);
+
+      if (
+        currentSession &&
+        isAnalysisRunning(currentSession) &&
+        !isAnalysisFinished(currentSession)
+      ) {
+        startPolling();
+      }
     } catch (err) {
       console.error(err);
 
@@ -372,6 +602,10 @@ export default function InsightsPage() {
 
   useEffect(() => {
     loadPage();
+
+    return () => {
+      clearPolling();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
@@ -381,8 +615,8 @@ export default function InsightsPage() {
     try {
       setAnalyzeLoading(true);
       setError("");
-      setVideoError("");
-      setInsightError("");
+      setVideoMessage("");
+      setInsightMessage("");
 
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/analyze`, {
         method: "POST",
@@ -398,22 +632,33 @@ export default function InsightsPage() {
       }
 
       if (res.status === 409) {
-        setError(
-          "Analysis has already started or is still processing. Please wait and refresh the results."
+        setInsightMessage(
+          "Analysis has already started or is still processing. The page will keep checking the status."
         );
+
+        const currentSession = await loadSessionStatus(session);
+        if (currentSession && isAnalysisRunning(currentSession)) {
+          startPolling();
+        }
+
         return;
       }
 
       if (!res.ok) {
-        setError(`Could not start analysis: ${res.status}`);
+        const text = await readErrorText(res);
+        setError(`Could not start analysis: ${res.status} ${text}`);
         return;
       }
 
-      await loadSession();
+      const currentSession = await loadSessionStatus(session);
 
-      setInsightError(
-        "Analysis has started. Please wait until ML Status becomes completed, then refresh results."
+      setInsightMessage(
+        "Analysis has started. This page will automatically refresh when results are ready."
       );
+
+      if (currentSession) {
+        startPolling();
+      }
     } catch (err) {
       console.error(err);
       setError("Could not start analysis.");
@@ -425,6 +670,48 @@ export default function InsightsPage() {
   const handleRefreshAll = async () => {
     await loadPage();
   };
+
+  const statusClass = (status?: string) => {
+    const value = (status || "").toLowerCase();
+
+    if (value === "completed" || value === "complete") {
+      return "bg-green-100 text-green-700 border-green-200";
+    }
+
+    if (value === "ready" || value === "uploaded") {
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    }
+
+    if (
+      value === "processing" ||
+      value === "queued" ||
+      value === "preprocessing" ||
+      value === "inferencing"
+    ) {
+      return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    }
+
+    if (value === "failed" || value === "error") {
+      return "bg-red-100 text-red-700 border-red-200";
+    }
+
+    return "bg-purple-100 text-purple-700 border-purple-200";
+  };
+
+  const canRunAnalysis = useMemo(() => {
+    if (!session) return false;
+
+    const hasUploadedFile =
+      session.csvUploadStatus === "uploaded" ||
+      session.movUploadStatus === "uploaded";
+
+    return (
+      session.status === "ready" &&
+      hasUploadedFile &&
+      !isAnalysisRunning(session) &&
+      !isAnalysisFinished(session)
+    );
+  }, [session]);
 
   const metricCards = [
     {
@@ -452,7 +739,6 @@ export default function InsightsPage() {
   return (
     <div className="min-h-screen bg-gray-100 px-6 py-10">
       <div className="mx-auto max-w-7xl rounded-[28px] bg-white px-8 py-10 shadow-sm">
-        {/* Header */}
         <div className="relative mb-10 text-center">
           <button
             onClick={() => navigate("/sessions")}
@@ -463,7 +749,7 @@ export default function InsightsPage() {
           </button>
 
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/home")}
             className="absolute right-0 top-2 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-purple-600 shadow-sm transition hover:bg-purple-50"
             aria-label="Go home"
           >
@@ -486,12 +772,11 @@ export default function InsightsPage() {
           </div>
         )}
 
-        {/* Session summary */}
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
             <p className="text-sm font-semibold text-gray-500">Session</p>
             <p className="mt-2 break-all text-lg font-bold text-purple-600">
-              {session?.title || `Session ${sessionId?.slice(0, 8) || ""}`}
+              {session?.title || `Session ${sessionId.slice(0, 8)}`}
             </p>
           </div>
 
@@ -527,7 +812,6 @@ export default function InsightsPage() {
           </div>
         </div>
 
-        {/* Top section: annotated video */}
         <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6 shadow-sm">
           <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -539,15 +823,14 @@ export default function InsightsPage() {
               </div>
 
               <p className="mt-2 text-gray-500">
-                This area displays the processed boxing video after the backend
-                generates annotated_video.mp4.
+                This area displays annotated_video.mp4 after ML processing is completed.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleStartAnalysis}
-                disabled={analyzeLoading}
+                disabled={!canRunAnalysis || analyzeLoading}
                 className="flex items-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {analyzeLoading ? (
@@ -596,15 +879,14 @@ export default function InsightsPage() {
                 </p>
 
                 <p className="mt-2 text-gray-500">
-                  {videoError ||
-                    "Run analysis first. After ML processing is completed, refresh this section to load the annotated video."}
+                  {videoMessage ||
+                    "If a MOV file was uploaded, the annotated video will appear after processing is completed."}
                 </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Bottom section: insights */}
         <div className="mt-8 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3">
@@ -627,10 +909,10 @@ export default function InsightsPage() {
             )}
           </div>
 
-          {insightError && (
+          {insightMessage && (
             <div className="mb-6 flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-4 text-yellow-700">
               <AlertCircle size={20} />
-              <span>{insightError}</span>
+              <span>{insightMessage}</span>
             </div>
           )}
 
@@ -694,9 +976,8 @@ export default function InsightsPage() {
           <div className="mt-6 rounded-2xl border border-purple-100 bg-purple-50 p-5 text-purple-700">
             <p className="font-semibold">Current flow</p>
             <p className="mt-1">
-              Upload CSV and MOV → click Run Analysis → wait until ML Status is
-              completed → click Refresh Results → annotated video and insight
-              results will appear on this page.
+              After analysis starts, this page polls session status every 5 seconds.
+              Results and annotated video are fetched only after processing is completed.
             </p>
           </div>
         </div>
