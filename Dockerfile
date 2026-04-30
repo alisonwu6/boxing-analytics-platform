@@ -8,15 +8,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Stage 2: Final image (Node.js + Python)
 FROM node:20-slim
 
-# Install Python 3 runtime
+# System libs required by opencv-python-headless and mediapipe
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-distutils \
+    libglib2.0-0 \
+    libgl1 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from stage 1
 COPY --from=python-deps /usr/local/lib/python3.11 /usr/local/lib/python3.11
 COPY --from=python-deps /usr/local/bin/python3.11  /usr/local/bin/python3.11
+COPY --from=python-deps /usr/local/bin/pip3.11     /usr/local/bin/pip3.11
 RUN ln -sf /usr/local/bin/python3.11 /usr/local/bin/python3
 
 WORKDIR /app
