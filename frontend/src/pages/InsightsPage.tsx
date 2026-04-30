@@ -41,12 +41,14 @@ type Session = {
 type InsightResult = {
   totalPunches?: number | string;
   dominantPunch?: string;
-  averageSpeed?: number | string;
-  peakPower?: number | string;
-  accuracyScore?: number | string;
-  consistencyScore?: number | string;
+  punchRate?: string;
+  sessionDuration?: string;
   summary?: string;
   recommendations?: string[];
+  uppercutCount?: number;
+  hookCount?: number;
+  jabCount?: number;
+  punchEvents?: any[];
   [key: string]: any;
 };
 
@@ -127,21 +129,22 @@ export default function InsightsPage() {
       ...(previousSession || {}),
       ...base,
 
-      id:
-        base.id ||
-        dataWrapper.id ||
-        previousSession?.id ||
-        sessionId,
+      id: base.id || dataWrapper.id || previousSession?.id || sessionId,
+
+      title:
+        base.title ||
+        dataWrapper.title ||
+        previousSession?.title ||
+        `Session ${sessionId.slice(0, 8)}`,
 
       status:
-        base.status ||
-        dataWrapper.status ||
-        previousSession?.status,
+        base.status || dataWrapper.status || previousSession?.status || "N/A",
 
       processingStatus:
         base.processingStatus ||
         dataWrapper.processingStatus ||
-        previousSession?.processingStatus,
+        previousSession?.processingStatus ||
+        "N/A",
 
       canFetchResults:
         base.canFetchResults ??
@@ -157,6 +160,19 @@ export default function InsightsPage() {
         base.movUploadStatus ||
         dataWrapper.movUploadStatus ||
         previousSession?.movUploadStatus,
+
+      sessionDate:
+        base.sessionDate ||
+        dataWrapper.sessionDate ||
+        previousSession?.sessionDate,
+
+      sessionStartAt:
+        base.sessionStartAt ||
+        dataWrapper.sessionStartAt ||
+        previousSession?.sessionStartAt,
+
+      createdAt:
+        base.createdAt || dataWrapper.createdAt || previousSession?.createdAt,
     };
   };
 
@@ -217,72 +233,95 @@ export default function InsightsPage() {
   const normaliseInsights = (data: any): InsightResult => {
     const source = data?.data || data?.result || data?.results || data || {};
 
+    const metricsArray = Array.isArray(source.metrics) ? source.metrics : [];
+
+    const resultSummaryArray = Array.isArray(source.resultSummary)
+      ? source.resultSummary
+      : [];
+
+    const getMetric = (name: string) => {
+      const item = metricsArray.find((metric: any) => metric.name === name);
+      return item?.value ?? "N/A";
+    };
+
+    const toNumber = (value: any) => {
+      const numberValue = Number(value);
+      return Number.isFinite(numberValue) ? numberValue : 0;
+    };
+
+    const uppercutCount = toNumber(getMetric("count_Uppercut"));
+    const hookCount = toNumber(getMetric("count_Hook"));
+    const jabCount = toNumber(getMetric("count_Jab"));
+
+    const punchCounts = [
+      { type: "Uppercut", value: uppercutCount },
+      { type: "Hook", value: hookCount },
+      { type: "Jab", value: jabCount },
+    ];
+
+    const dominantPunch =
+      punchCounts.sort((a, b) => b.value - a.value)[0]?.type || "N/A";
+
+    const totalPunches =
+      source.totalPunches ||
+      source.total_punches ||
+      getMetric("totalPunches");
+
+    const punchesPerMinute =
+      source.punchesPerMinute ||
+      source.punches_per_minute ||
+      getMetric("punchesPerMinute");
+
+    const sessionDurationSecs =
+      source.sessionDurationSecs ||
+      source.session_duration_secs ||
+      getMetric("sessionDurationSecs");
+
+    const formattedPunchRate =
+      punchesPerMinute !== "N/A"
+        ? `${Number(punchesPerMinute).toFixed(2)} punches/min`
+        : "N/A";
+
+    const formattedDuration =
+      sessionDurationSecs !== "N/A"
+        ? `${Number(sessionDurationSecs).toFixed(1)} sec`
+        : "N/A";
+
+    const summaryText =
+      resultSummaryArray.length > 0
+        ? resultSummaryArray
+            .map((item: any) => {
+              if (typeof item === "string") return item;
+              return JSON.stringify(item);
+            })
+            .join(". ")
+        : source.summaryText ||
+          source.summary_text ||
+          source.feedbackSummary ||
+          source.feedback_summary ||
+          source.summary ||
+          "Analysis completed. The session results have been generated from the uploaded boxing data.";
+
     return {
-      totalPunches:
-        source.totalPunches ||
-        source.total_punches ||
-        source.metrics?.totalPunches ||
-        source.metrics?.total_punches ||
-        source.summary?.totalPunches ||
-        "N/A",
+      totalPunches,
+      dominantPunch,
+      punchRate: formattedPunchRate,
+      sessionDuration: formattedDuration,
 
-      dominantPunch:
-        source.dominantPunch ||
-        source.dominant_punch ||
-        source.metrics?.dominantPunch ||
-        source.metrics?.dominant_punch ||
-        source.summary?.dominantPunch ||
-        "N/A",
+      summary: summaryText,
 
-      averageSpeed:
-        source.averageSpeed ||
-        source.average_speed ||
-        source.metrics?.averageSpeed ||
-        source.metrics?.average_speed ||
-        source.summary?.averageSpeed ||
-        "N/A",
+      recommendations: [
+        `Your dominant punch type was ${dominantPunch}. Review whether this matches the training goal for this session.`,
+        `You completed ${totalPunches} punches at an average rate of ${Number(
+          punchesPerMinute || 0
+        ).toFixed(2)} punches per minute.`,
+        "Use the annotated video to review punch timing, body rotation, and recovery after each punch.",
+      ],
 
-      peakPower:
-        source.peakPower ||
-        source.peak_power ||
-        source.metrics?.peakPower ||
-        source.metrics?.peak_power ||
-        source.summary?.peakPower ||
-        "N/A",
-
-      accuracyScore:
-        source.accuracyScore ||
-        source.accuracy_score ||
-        source.metrics?.accuracyScore ||
-        source.metrics?.accuracy_score ||
-        source.summary?.accuracyScore ||
-        "N/A",
-
-      consistencyScore:
-        source.consistencyScore ||
-        source.consistency_score ||
-        source.metrics?.consistencyScore ||
-        source.metrics?.consistency_score ||
-        source.summary?.consistencyScore ||
-        "N/A",
-
-      summary:
-        source.summaryText ||
-        source.summary_text ||
-        source.feedbackSummary ||
-        source.feedback_summary ||
-        source.summary ||
-        "Analysis results are not available yet. Once processing is completed, this section will show the session summary, punch patterns, and improvement feedback.",
-
-      recommendations:
-        source.recommendations ||
-        source.feedback ||
-        source.suggestions ||
-        [
-          "Wait until ML Status becomes completed.",
-          "Refresh results after processing is completed.",
-          "Use the annotated video and insight metrics to review punch timing, body rotation, and recovery movement.",
-        ],
+      uppercutCount,
+      hookCount,
+      jabCount,
+      punchEvents: Array.isArray(source.punchEvents) ? source.punchEvents : [],
     };
   };
 
@@ -517,7 +556,9 @@ export default function InsightsPage() {
     }
 
     if (isAnalysisFailed(targetSession)) {
-      setInsightMessage("Analysis failed. Please check the uploaded files or rerun analysis.");
+      setInsightMessage(
+        "Analysis failed. Please check the uploaded files or rerun analysis."
+      );
       setVideoMessage("Analysis failed, so annotated video is not available.");
       setInsights(normaliseInsights({}));
       return;
@@ -725,16 +766,70 @@ export default function InsightsPage() {
       icon: Target,
     },
     {
-      label: "Average Speed",
-      value: insights?.averageSpeed ?? "N/A",
+      label: "Punch Rate",
+      value: insights?.punchRate ?? "N/A",
       icon: Zap,
     },
     {
-      label: "Peak Power",
-      value: insights?.peakPower ?? "N/A",
+      label: "Session Duration",
+      value: insights?.sessionDuration ?? "N/A",
       icon: TrendingUp,
     },
   ];
+
+  const punchBreakdown = [
+    {
+      label: "Uppercut",
+      value: insights?.uppercutCount ?? 0,
+    },
+    {
+      label: "Hook",
+      value: insights?.hookCount ?? 0,
+    },
+    {
+      label: "Jab",
+      value: insights?.jabCount ?? 0,
+    },
+  ];
+
+  const maxPunchTypeValue = Math.max(
+    ...punchBreakdown.map((item) => Number(item.value) || 0),
+    1
+  );
+
+  const punchTimeline = useMemo(() => {
+    const events = insights?.punchEvents || [];
+
+    if (!Array.isArray(events) || events.length === 0) return [];
+
+    const bucketSize = 30;
+    const buckets: Record<string, number> = {};
+
+    events.forEach((event: any) => {
+      const time = Number(event.t || event.time || event.timestamp || 0);
+
+      if (!Number.isFinite(time)) return;
+
+      const bucketStart = Math.floor(time / bucketSize) * bucketSize;
+      const bucketLabel = `${bucketStart}-${bucketStart + bucketSize}s`;
+
+      buckets[bucketLabel] = (buckets[bucketLabel] || 0) + 1;
+    });
+
+    return Object.entries(buckets).map(([label, value]) => ({
+      label,
+      value,
+    }));
+  }, [insights]);
+
+  const maxTimelineValue = Math.max(
+    ...punchTimeline.map((item) => Number(item.value) || 0),
+    1
+  );
+
+  const eventPreview = Array.isArray(insights?.punchEvents)
+    ? insights.punchEvents.slice(0, 8)
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-100 px-6 py-10">
@@ -781,7 +876,9 @@ export default function InsightsPage() {
           </div>
 
           <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-            <p className="text-sm font-semibold text-gray-500">Session Status</p>
+            <p className="text-sm font-semibold text-gray-500">
+              Session Status
+            </p>
             <span
               className={`mt-2 inline-block rounded-full border px-3 py-1 text-sm font-semibold ${statusClass(
                 session?.status
@@ -806,7 +903,9 @@ export default function InsightsPage() {
             <p className="text-sm font-semibold text-gray-500">Created</p>
             <p className="mt-2 text-gray-700">
               {formatDate(
-                session?.sessionDate || session?.sessionStartAt || session?.createdAt
+                session?.sessionDate ||
+                  session?.sessionStartAt ||
+                  session?.createdAt
               )}
             </p>
           </div>
@@ -823,7 +922,8 @@ export default function InsightsPage() {
               </div>
 
               <p className="mt-2 text-gray-500">
-                This area displays annotated_video.mp4 after ML processing is completed.
+                This area displays annotated_video.mp4 after ML processing is
+                completed.
               </p>
             </div>
 
@@ -939,6 +1039,107 @@ export default function InsightsPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <Activity className="text-purple-600" size={22} />
+                <h3 className="text-xl font-bold text-gray-800">
+                  Punch Type Distribution
+                </h3>
+              </div>
+
+              <p className="mb-5 text-sm text-gray-500">
+                This chart shows how many punches were detected for each punch
+                type.
+              </p>
+
+              <div className="space-y-4">
+                {punchBreakdown.map((item) => {
+                  const width = `${Math.max(
+                    (Number(item.value) / maxPunchTypeValue) * 100,
+                    4
+                  )}%`;
+
+                  return (
+                    <div key={item.label}>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="font-semibold text-gray-700">
+                          {item.label}
+                        </span>
+                        <span className="font-bold text-purple-600">
+                          {item.value}
+                        </span>
+                      </div>
+
+                      <div className="h-4 overflow-hidden rounded-full bg-white">
+                        <div
+                          className="h-full rounded-full bg-purple-500"
+                          style={{ width }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 rounded-xl bg-white p-4 text-sm text-gray-600">
+                Dominant punch:{" "}
+                <span className="font-bold text-purple-600">
+                  {insights?.dominantPunch || "N/A"}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <TrendingUp className="text-purple-600" size={22} />
+                <h3 className="text-xl font-bold text-gray-800">
+                  Punch Timeline
+                </h3>
+              </div>
+
+              <p className="mb-5 text-sm text-gray-500">
+                Punch events are grouped into 30-second blocks to show activity
+                rhythm.
+              </p>
+
+              {punchTimeline.length > 0 ? (
+                <div className="space-y-3">
+                  {punchTimeline.map((item) => {
+                    const width = `${Math.max(
+                      (Number(item.value) / maxTimelineValue) * 100,
+                      4
+                    )}%`;
+
+                    return (
+                      <div key={item.label}>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                          <span className="font-semibold text-gray-600">
+                            {item.label}
+                          </span>
+                          <span className="font-bold text-purple-600">
+                            {item.value}
+                          </span>
+                        </div>
+
+                        <div className="h-3 overflow-hidden rounded-full bg-white">
+                          <div
+                            className="h-full rounded-full bg-purple-400"
+                            style={{ width }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
+                  Punch timeline data is not available yet.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
               <div className="mb-3 flex items-center gap-2">
                 <FileText className="text-purple-600" size={22} />
                 <h3 className="text-xl font-bold text-gray-800">
@@ -950,6 +1151,29 @@ export default function InsightsPage() {
                 {insights?.summary ||
                   "No summary has been returned by the backend yet."}
               </p>
+
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl bg-white px-4 py-3">
+                  <p className="text-sm text-gray-500">Uppercut</p>
+                  <p className="text-xl font-bold text-purple-600">
+                    {insights?.uppercutCount ?? 0}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-white px-4 py-3">
+                  <p className="text-sm text-gray-500">Hook</p>
+                  <p className="text-xl font-bold text-purple-600">
+                    {insights?.hookCount ?? 0}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-white px-4 py-3">
+                  <p className="text-sm text-gray-500">Jab</p>
+                  <p className="text-xl font-bold text-purple-600">
+                    {insights?.jabCount ?? 0}
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
@@ -973,11 +1197,68 @@ export default function InsightsPage() {
             </div>
           </div>
 
+          <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-6">
+            <div className="mb-3 flex items-center gap-2">
+              <Target className="text-purple-600" size={22} />
+              <h3 className="text-xl font-bold text-gray-800">
+                Punch Event Preview
+              </h3>
+            </div>
+
+            <p className="mb-5 text-sm text-gray-500">
+              A sample of detected punch events from the ML output.
+            </p>
+
+            {eventPreview.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full border-separate border-spacing-y-2 text-left text-sm">
+                  <thead>
+                    <tr className="text-gray-500">
+                      <th className="px-4 py-2">Time</th>
+                      <th className="px-4 py-2">Punch Type</th>
+                      <th className="px-4 py-2">Hand</th>
+                      <th className="px-4 py-2">Confidence</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {eventPreview.map((event: any, index: number) => (
+                      <tr key={index} className="bg-white text-gray-700">
+                        <td className="rounded-l-xl px-4 py-3">
+                          {Number(event.t || event.time || 0).toFixed(2)}s
+                        </td>
+
+                        <td className="px-4 py-3 font-semibold text-purple-600">
+                          {event.type || "Unknown"}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {event.hand || "Unknown"}
+                        </td>
+
+                        <td className="rounded-r-xl px-4 py-3">
+                          {event.confidence !== undefined
+                            ? `${(Number(event.confidence) * 100).toFixed(1)}%`
+                            : "N/A"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
+                Punch event data is not available yet.
+              </div>
+            )}
+          </div>
+
           <div className="mt-6 rounded-2xl border border-purple-100 bg-purple-50 p-5 text-purple-700">
-            <p className="font-semibold">Current flow</p>
+            <p className="font-semibold">Current insight coverage</p>
             <p className="mt-1">
-              After analysis starts, this page polls session status every 5 seconds.
-              Results and annotated video are fetched only after processing is completed.
+              This page currently visualises punch volume, punch cadence, punch
+              type classification, punch distribution, timeline pattern, and
+              event-level preview based on the current backend ML output.
             </p>
           </div>
         </div>
