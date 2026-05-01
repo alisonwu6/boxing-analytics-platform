@@ -8,6 +8,10 @@ const app = express();
 
 app.use(cors({ origin: "http://localhost:5173" }));
 app.use(express.json());
+app.use((req, res, next) => {
+  console.log(`[REQ] ${req.method} ${req.originalUrl}`);
+  next();
+});
 setupSwagger(app);
 
 app.get('/health', (req, res) => {

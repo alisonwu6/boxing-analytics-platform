@@ -11,6 +11,7 @@ Returns only artifact references — all numeric punch data comes from imu_model
 import os
 import sys
 import tempfile
+import subprocess
 
 import boto3
 
@@ -65,14 +66,61 @@ def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str)
         finally:
             sys.stdout = old_stdout
 
-        # Upload annotated video back to S3
+                # Upload annotated video back to S3
         annotated_path = os.path.join(out_dir, "input_annotated.mp4")
+
+        if not os.path.exists(annotated_path):
+            raise FileNotFoundError(f"Annotated video not found: {annotated_path}")
+
+        # Convert OpenCV MP4 to browser-compatible H.264 MP4
+        browser_video_path = os.path.join(out_dir, "annotated_video_browser.mp4")
+
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    annotated_path,
+                    "-vcodec",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
+                    "-an",
+                    browser_video_path,
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            upload_path = browser_video_path
+            print(
+                "[VideoModel] Converted annotated video to browser-compatible H.264 MP4",
+                file=sys.stderr,
+            )
+
+        except Exception as error:
+            print(
+                f"[VideoModel] ffmpeg conversion failed, uploading original video: {error}",
+                file=sys.stderr,
+            )
+            upload_path = annotated_path
+
         output_key = f"outputs/{session_id}/annotated_video.mp4"
 
-        with open(annotated_path, "rb") as f:
+        with open(upload_path, "rb") as f:
             s3.upload_fileobj(
-                f, bucket, output_key,
-                ExtraArgs={"ContentType": "video/mp4"},
+                f,
+                bucket,
+                output_key,
+                ExtraArgs={
+                    "ContentType": "video/mp4",
+                    "ContentDisposition": "inline",
+                },
             )
 
     return {

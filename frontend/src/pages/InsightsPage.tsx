@@ -220,7 +220,7 @@ export default function InsightsPage() {
   };
 
   const getVideoUrlFromResponse = (data: any) => {
-    return (
+  return (
       data?.videoUrl ||
       data?.url ||
       data?.presignedUrl ||
@@ -232,8 +232,8 @@ export default function InsightsPage() {
       data?.result?.videoUrl ||
       data?.result?.url ||
       ""
-    );
-  };
+  );
+};
 
   const normaliseInsights = (data: any): InsightResult => {
     const source = data?.data || data?.result || data?.results || data || {};
@@ -471,89 +471,87 @@ export default function InsightsPage() {
   };
 
   const loadAnnotatedVideo = async (targetSession?: Session | null) => {
-    if (!sessionId) return;
+  if (!sessionId) return;
 
-    const currentSession = targetSession || session;
+  const currentSession = targetSession || session;
 
-    if (!hasMovUploaded(currentSession)) {
+  if (!isAnalysisFinished(currentSession)) {
+    setVideoUrl("");
+    setVideoMessage(
+      "Annotated video will appear after ML processing is completed."
+    );
+    return;
+  }
+
+  try {
+    setVideoLoading(true);
+    setVideoMessage("");
+
+    console.log("[VIDEO] fetching annotated video URL:", sessionId);
+
+    const res = await fetch(
+      `${API_BASE_URL}/sessions/${sessionId}/results/video`,
+      {
+        method: "GET",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      }
+    );
+
+    console.log("[VIDEO] response status:", res.status);
+
+    if (res.status === 404) {
       setVideoUrl("");
       setVideoMessage(
-        "No MOV file was uploaded for this session, so annotated video is not available."
+        "Analysis completed, but no annotated video was returned for this session."
       );
       return;
     }
 
-    if (!isAnalysisFinished(currentSession)) {
+    if (res.status === 409) {
       setVideoUrl("");
       setVideoMessage(
-        "Annotated video will appear after ML processing is completed."
+        "Video is still being prepared. Please refresh results in a moment."
       );
       return;
     }
 
-    try {
-      setVideoLoading(true);
-      setVideoMessage("");
-
-      const res = await fetch(
-        `${API_BASE_URL}/sessions/${sessionId}/results/video`,
-        {
-          method: "GET",
-          headers: {
-            ...getAuthHeaders(),
-          },
-        }
-      );
-
-      if (res.status === 404) {
-        setVideoUrl("");
-        setVideoMessage(
-          "Annotated video is not ready yet. It may still be uploading or generating."
-        );
-        return;
-      }
-
-      if (res.status === 409) {
-        setVideoUrl("");
-        setVideoMessage(
-          "Analysis is still processing. The annotated video will be available after ML processing is completed."
-        );
-        return;
-      }
-
-      if (res.status === 401) {
-        setVideoUrl("");
-        setVideoMessage("Unauthorized. Please login again.");
-        return;
-      }
-
-      if (!res.ok) {
-        const text = await readErrorText(res);
-        setVideoUrl("");
-        setVideoMessage(`Failed to load annotated video: ${res.status} ${text}`);
-        return;
-      }
-
-      const data = await res.json();
-      console.log("Annotated video response:", data);
-
-      const url = getVideoUrlFromResponse(data);
-
-      if (!url) {
-        setVideoUrl("");
-        setVideoMessage("Backend did not return a video URL.");
-        return;
-      }
-
-      setVideoUrl(url);
-    } catch (err) {
-      console.warn("Annotated video not ready:", err);
+    if (res.status === 401) {
       setVideoUrl("");
-      setVideoMessage("Could not load annotated video.");
-    } finally {
-      setVideoLoading(false);
+      setVideoMessage("Unauthorized. Please login again.");
+      return;
     }
-  };
+
+    if (!res.ok) {
+      const text = await readErrorText(res);
+      setVideoUrl("");
+      setVideoMessage(`Failed to load annotated video: ${res.status} ${text}`);
+      return;
+    }
+
+    const data = await res.json();
+
+    console.log("[VIDEO] video url response:", data);
+
+    const url = getVideoUrlFromResponse(data);
+
+    if (!url) {
+      setVideoUrl("");
+      setVideoMessage("Backend did not return a video URL.");
+      return;
+    }
+
+    setVideoUrl(url);
+    setVideoMessage("");
+  } catch (err) {
+    console.error("[VIDEO] could not load annotated video:", err);
+    setVideoUrl("");
+    setVideoMessage("Could not load annotated video.");
+  } finally {
+    setVideoLoading(false);
+  }
+};
 
   const loadInsights = async (targetSession?: Session | null) => {
     if (!sessionId) return;

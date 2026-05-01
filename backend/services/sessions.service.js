@@ -203,18 +203,44 @@ async function getSessionStatus(id, userId) {
 }
 
 async function startSessionAnalysis(id, userId) {
+  console.log("[ANALYZE SERVICE] request received:", {
+    sessionId: id,
+    userId,
+  });
+
   const session = await sessionsRepository.findSessionById(id);
 
   if (!session) {
-    throw createHttpError(404, 'Session not found');
+    throw createHttpError(404, "Session not found");
   }
 
   if (userId && session.userId !== userId) {
-    throw createHttpError(404, 'Session not found');
+    throw createHttpError(404, "Session not found");
   }
 
-  if (!session.csvFile && !session.movFile && !session.csvKey && !session.movKey) {
-    throw createHttpError(400, 'Session has no uploaded files');
+  const hasCsv = Boolean(session.csvKey || session.csvFile);
+  const hasMov = Boolean(session.movKey || session.movFile);
+
+  if (!hasCsv) {
+    throw createHttpError(400, "Session has no CSV file to infer from");
+  }
+
+  if (!hasMov) {
+    throw createHttpError(400, "Session has no MOV file to generate annotated video");
+  }
+
+  if (session.status === "processing") {
+    console.log("[ANALYZE SERVICE] session is already processing:", {
+      sessionId: session.id,
+      processingStatus: session.processingStatus,
+    });
+
+    return {
+      message: "Session analysis is already running",
+      sessionId: session.id,
+      status: session.status,
+      processingStatus: session.processingStatus,
+    };
   }
 
   const updatedAt = new Date().toISOString();
@@ -222,12 +248,12 @@ async function startSessionAnalysis(id, userId) {
 
   const nextSession = {
     ...session,
-    status: 'processing',
-    processingStatus: 'queued',
+    status: "processing",
+    processingStatus: "queued",
     results: {
       ...existingResults,
       errorMessage: null,
-      processingStartedAt: existingResults.processingStartedAt || updatedAt,
+      processingStartedAt: updatedAt,
       processingFinishedAt: null,
     },
     updatedAt,
@@ -235,11 +261,29 @@ async function startSessionAnalysis(id, userId) {
 
   const saved = await sessionsRepository.updateSession(id, nextSession);
 
-  // Fire-and-forget: run ML inference in background, do not await
-  _runInferenceBackground(saved);
+  console.log("[ANALYZE SERVICE] queued session:", {
+    sessionId: saved.id,
+    status: saved.status,
+    processingStatus: saved.processingStatus,
+    csvKey: saved.csvKey,
+    movKey: saved.movKey,
+    python: process.env.PYTHON_BIN,
+  });
+
+  // Start background job after response cycle.
+  // This prevents the request from waiting for the full video process.
+  setImmediate(() => {
+    _runInferenceBackground(saved).catch((error) => {
+      console.error("[ANALYZE SERVICE] background job crashed:", {
+        sessionId: saved.id,
+        message: error.message,
+        stack: error.stack,
+      });
+    });
+  });
 
   return {
-    message: 'Session analysis started',
+    message: "Session analysis started",
     sessionId: saved.id,
     status: saved.status,
     processingStatus: saved.processingStatus,
@@ -247,16 +291,61 @@ async function startSessionAnalysis(id, userId) {
 }
 
 async function _runInferenceBackground(session) {
-  const startedAt = session.results?.processingStartedAt || new Date().toISOString();
+  const startedAt =
+    session.results?.processingStartedAt || new Date().toISOString();
+
+  console.log("[ANALYZE JOB] background job started:", {
+    sessionId: session.id,
+    csvKey: session.csvKey,
+    movKey: session.movKey,
+    python: process.env.PYTHON_BIN,
+  });
 
   try {
-    const { payload } = await runSessionInference(session);
+    const inferencingAt = new Date().toISOString();
+
+    const runningSession = {
+      ...session,
+      status: "processing",
+      processingStatus: "inferencing",
+      results: {
+        ...(session.results || buildEmptyResults()),
+        errorMessage: null,
+        processingStartedAt: startedAt,
+        processingFinishedAt: null,
+      },
+      updatedAt: inferencingAt,
+    };
+
+    await sessionsRepository.updateSession(session.id, runningSession);
+
+    console.log("[ANALYZE JOB] status changed to inferencing:", {
+      sessionId: session.id,
+    });
+
+    console.log("[ANALYZE JOB] calling runSessionInference...");
+
+    const { payload } = await runSessionInference(runningSession);
+
+    console.log("[ANALYZE JOB] runSessionInference returned:", {
+      sessionId: session.id,
+      modelVersion: payload?.modelVersion,
+      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
+      punchEventsCount: Array.isArray(payload?.punchEvents)
+        ? payload.punchEvents.length
+        : 0,
+      artifacts: payload?.artifacts,
+    });
+
     const finishedAt = new Date().toISOString();
 
+    const latestSession =
+      (await sessionsRepository.findSessionById(session.id)) || runningSession;
+
     await sessionsRepository.updateSession(session.id, {
-      ...session,
-      status: 'completed',
-      processingStatus: 'completed',
+      ...latestSession,
+      status: "completed",
+      processingStatus: "completed",
       results: {
         ...buildEmptyResults(),
         ...payload,
@@ -266,23 +355,50 @@ async function _runInferenceBackground(session) {
       },
       updatedAt: finishedAt,
     });
+
+    console.log("[ANALYZE JOB] session completed:", {
+      sessionId: session.id,
+      finishedAt,
+      annotatedVideoKey: payload?.artifacts?.annotatedVideoKey,
+    });
   } catch (error) {
     const finishedAt = new Date().toISOString();
-    console.error('[ML inference failed]', session.id, error.message);
 
-    await sessionsRepository.updateSession(session.id, {
-      ...session,
-      status: 'failed',
-      processingStatus: 'failed',
-      results: {
-        ...buildEmptyResults(),
-        ...(session.results || {}),
-        errorMessage: error.message || 'Inference failed',
-        processingStartedAt: startedAt,
-        processingFinishedAt: finishedAt,
-      },
-      updatedAt: finishedAt,
+    console.error("[ML inference failed]", {
+      sessionId: session.id,
+      message: error.message,
+      stack: error.stack,
     });
+
+    try {
+      const latestSession =
+        (await sessionsRepository.findSessionById(session.id)) || session;
+
+      await sessionsRepository.updateSession(session.id, {
+        ...latestSession,
+        status: "failed",
+        processingStatus: "failed",
+        results: {
+          ...buildEmptyResults(),
+          ...(latestSession.results || {}),
+          errorMessage: error.message || "Inference failed",
+          processingStartedAt: startedAt,
+          processingFinishedAt: finishedAt,
+        },
+        updatedAt: finishedAt,
+      });
+
+      console.log("[ANALYZE JOB] session marked as failed:", {
+        sessionId: session.id,
+        errorMessage: error.message,
+      });
+    } catch (updateError) {
+      console.error("[ANALYZE JOB] failed to update failed status:", {
+        sessionId: session.id,
+        message: updateError.message,
+        stack: updateError.stack,
+      });
+    }
   }
 }
 
