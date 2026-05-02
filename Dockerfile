@@ -44,4 +44,7 @@ COPY ml/ ./ml/
 
 EXPOSE 3001
 
+ENV DATABASE_URL="postgresql://postgres:QwzRURvPCLkQzViNieAm@boxing-analytics-db.clck0uii4xz2.ap-southeast-2.rds.amazonaws.com:5432/boxing-analytics"
+ENV JWT_SECRET="1dd3060889757d14f8d921c8f553a5bad668133bdd72e3c78cb6d092276364ae"
+
 CMD ["node", "backend/index.js"]
