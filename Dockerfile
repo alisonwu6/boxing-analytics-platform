@@ -1,12 +1,12 @@
 # Stage 1: Install Python deps
-FROM python:3.11-slim AS python-deps
+FROM python:3.11-slim-bookworm AS python-deps
 
 WORKDIR /app/ml
 COPY ml/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Final image (Node.js + Python)
-FROM node:20-slim
+FROM node:20-bookworm-slim
 
 # System libs required by opencv-python-headless and mediapipe
 RUN apt-get update && apt-get install -y --no-install-recommends \
