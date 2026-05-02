@@ -9,7 +9,8 @@ const app = express();
 // Setup CORS to allow requests from the deployed Amplify frontend or local dev
 const allowedOrigins = [
   "http://localhost:5173",
-  "http://localhost:3000"
+  "http://localhost:3000",
+  "https://main.d1jhoow7acwkrl.amplifyapp.com"
 ];
 
 if (process.env.FRONTEND_URL) {
