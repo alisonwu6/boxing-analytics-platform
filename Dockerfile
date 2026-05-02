@@ -12,6 +12,7 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-distutils \
+    ffmpeg \
     libglib2.0-0 \
     libgl1 \
     libgomp1 \
@@ -19,9 +20,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy installed Python packages from stage 1
 COPY --from=python-deps /usr/local/lib/python3.11 /usr/local/lib/python3.11
+COPY --from=python-deps /usr/local/lib/libpython3.11.so.1.0 /usr/local/lib/libpython3.11.so.1.0
+COPY --from=python-deps /usr/local/lib/libpython3.11.so /usr/local/lib/libpython3.11.so
 COPY --from=python-deps /usr/local/bin/python3.11  /usr/local/bin/python3.11
 COPY --from=python-deps /usr/local/bin/pip3.11     /usr/local/bin/pip3.11
-RUN ln -sf /usr/local/bin/python3.11 /usr/local/bin/python3
+ENV LD_LIBRARY_PATH=/usr/local/lib
+RUN ln -sf /usr/local/bin/python3.11 /usr/local/bin/python3 \
+    && ln -sf /usr/local/bin/python3.11 /usr/local/bin/python
 
 WORKDIR /app
 
