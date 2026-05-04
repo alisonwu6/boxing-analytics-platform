@@ -44,8 +44,12 @@ def infer(bucket: str, region: str, csv_key: str) -> dict:
     pipeline = _get_pipeline()
     predictions_df = pipeline.predict(raw_df)
 
-    from ml_pipeline.boxing_insights import generate_basic_insights
+    from ml_pipeline.boxing_insights import (
+        generate_advanced_insights,
+        generate_basic_insights,
+    )
     insights = generate_basic_insights(predictions_df)
+    advanced_insights = generate_advanced_insights(raw_df, predictions_df)
 
     punch_events = []
     if not predictions_df.empty:
@@ -79,5 +83,6 @@ def infer(bucket: str, region: str, csv_key: str) -> dict:
         "resultSummary": result_summary,
         "metrics":       metrics,
         "punchEvents":   punch_events,
+        "advancedInsights": advanced_insights,
         "artifacts":     {},
     }
