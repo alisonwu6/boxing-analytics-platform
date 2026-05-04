@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft,
-  Home,
-  RefreshCw,
-  Video,
   Activity,
   AlertCircle,
+  ArrowLeft,
   CheckCircle,
   Dumbbell,
-  Target,
-  Zap,
-  TrendingUp,
+  Gauge,
+  Home,
   PlayCircle,
+  RefreshCw,
+  RotateCw,
   ShieldCheck,
+  Target,
   Timer,
-  FileText,
+  TrendingUp,
+  Video,
+  Waves,
+  Zap,
 } from "lucide-react";
 
 const API_BASE_URL =
@@ -51,28 +53,681 @@ type InsightResult = {
   punchRate?: string;
   sessionDuration?: string;
   dominantPunch?: string;
-
-  workRateZone?: string;
-  punchMixBalance?: string;
   avgConfidence?: string;
-  avgCombinationGap?: string;
-  longestInactiveGap?: string;
-
-  uppercutCount?: number;
-  hookCount?: number;
-  jabCount?: number;
-
+  avgPeakAcceleration?: string;
+  punchMixInsight?: string;
   recommendations?: string[];
   punchEvents?: any[];
   advancedInsights?: AdvancedInsights | null;
-
-  [key: string]: any;
+  jabCount?: number;
+  hookCount?: number;
+  uppercutCount?: number;
 };
+
+function SummaryCard({
+  label,
+  value,
+  note,
+  icon: Icon,
+}: {
+  label: string;
+  value: any;
+  note?: string;
+  icon: any;
+}) {
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-5 shadow-sm">
+      <Icon className="mb-3 text-purple-600" size={24} />
+      <p className="text-sm font-semibold text-gray-500">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-gray-800">{value}</p>
+      {note && <p className="mt-2 text-xs leading-5 text-gray-500">{note}</p>}
+    </div>
+  );
+}
+
+function DonutChart({
+  title,
+  subtitle,
+  totalLabel,
+  totalValue,
+  items,
+  insight,
+}: {
+  title: string;
+  subtitle?: string;
+  totalLabel: string;
+  totalValue: string | number;
+  insight?: string;
+  items: { label: string; value: number; color: string }[];
+}) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  let start = 0;
+
+  const gradient = items
+    .map((item) => {
+      const deg = total > 0 ? (item.value / total) * 360 : 0;
+      const segment = `${item.color} ${start}deg ${start + deg}deg`;
+      start += deg;
+      return segment;
+    })
+    .join(", ");
+
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+      {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
+
+      <div className="mt-6 flex flex-col items-center gap-6 lg:flex-row lg:justify-between">
+        <div className="relative flex h-56 w-56 items-center justify-center">
+          <div
+            className="h-56 w-56 rounded-full shadow-inner"
+            style={{
+              background:
+                total > 0
+                  ? `conic-gradient(${gradient})`
+                  : "conic-gradient(#e5e7eb 0deg 360deg)",
+            }}
+          />
+
+          <div className="absolute flex h-32 w-32 flex-col items-center justify-center rounded-full bg-white shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              {totalLabel}
+            </p>
+            <p className="mt-1 text-3xl font-extrabold text-purple-600">
+              {totalValue}
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full max-w-sm space-y-3">
+          {items.map((item) => {
+            const pct =
+              total > 0 ? ((item.value / total) * 100).toFixed(1) : "0.0";
+
+            return (
+              <div
+                key={item.label}
+                className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="font-medium text-gray-700">
+                    {item.label}
+                  </span>
+                </div>
+
+                <div className="text-right">
+                  <p className="font-bold text-purple-600">{item.value}</p>
+                  <p className="text-xs text-gray-500">{pct}%</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {insight && (
+        <div className="mt-5 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-purple-700 shadow-sm">
+          {insight}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LineChart({
+  title,
+  subtitle,
+  data,
+  unit = "",
+}: {
+  title: string;
+  subtitle?: string;
+  data: { label: string; value: number }[];
+  unit?: string;
+}) {
+  const clean = data.filter((item) => Number.isFinite(item.value));
+
+  if (clean.length === 0) {
+    return (
+      <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+        <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+        {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
+        <div className="mt-5 rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Data is not available.
+        </div>
+      </div>
+    );
+  }
+
+  const width = 620;
+  const height = 240;
+  const padding = 36;
+
+  const maxValue = Math.max(...clean.map((item) => item.value), 1);
+  const minValue = Math.min(...clean.map((item) => item.value), 0);
+
+  const points = clean.map((item, index) => {
+    const x =
+      clean.length === 1
+        ? width / 2
+        : padding + (index / (clean.length - 1)) * (width - padding * 2);
+
+    const normalized =
+      maxValue === minValue
+        ? 0.5
+        : (item.value - minValue) / (maxValue - minValue);
+
+    const y = height - padding - normalized * (height - padding * 2);
+
+    return { ...item, x, y };
+  });
+
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+      {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
+
+      <div className="mt-5 overflow-x-auto rounded-2xl bg-white p-4 shadow-sm">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[520px]">
+          {[0, 1, 2, 3].map((line) => {
+            const y = padding + ((height - padding * 2) / 3) * line;
+
+            return (
+              <line
+                key={line}
+                x1={padding}
+                x2={width - padding}
+                y1={y}
+                y2={y}
+                stroke="#e5e7eb"
+                strokeDasharray="4 4"
+              />
+            );
+          })}
+
+          {points.length > 1 && (
+            <polyline
+              fill="none"
+              stroke="#7c3aed"
+              strokeWidth="4"
+              points={polyline}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+
+          {points.map((point, index) => (
+            <g key={`${point.label}-${index}`}>
+              <circle cx={point.x} cy={point.y} r="6" fill="#7c3aed" />
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r="12"
+                fill="#7c3aed"
+                opacity="0.12"
+              />
+
+              <text
+                x={point.x}
+                y={point.y - 14}
+                textAnchor="middle"
+                fontSize="11"
+                fill="#7c3aed"
+                fontWeight="700"
+              >
+                {point.value.toFixed(1)}
+                {unit}
+              </text>
+
+              <text
+                x={point.x}
+                y={height - 8}
+                textAnchor="middle"
+                fontSize="10"
+                fill="#6b7280"
+              >
+                {point.label.length > 8
+                  ? `${point.label.slice(0, 7)}…`
+                  : point.label}
+              </text>
+            </g>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function GroupedBarChart({
+  title,
+  subtitle,
+  data,
+}: {
+  title: string;
+  subtitle?: string;
+  data: { label: string; forward: number; retraction: number }[];
+}) {
+  const maxValue = Math.max(
+    ...data.flatMap((item) => [item.forward, item.retraction]),
+    1
+  );
+
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+      {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
+
+      {data.length > 0 ? (
+        <div className="mt-5 space-y-4">
+          {data.map((item) => {
+            const forwardWidth = `${Math.max(
+              (item.forward / maxValue) * 100,
+              4
+            )}%`;
+
+            const retractionWidth = `${Math.max(
+              (item.retraction / maxValue) * 100,
+              4
+            )}%`;
+
+            return (
+              <div key={item.label} className="rounded-2xl bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between text-sm">
+                  <span className="font-semibold text-gray-700">
+                    {item.label}
+                  </span>
+                  <span className="text-gray-500">
+                    F {item.forward.toFixed(3)}s / R{" "}
+                    {item.retraction.toFixed(3)}s
+                  </span>
+                </div>
+
+                <div className="mb-3">
+                  <div className="mb-1 text-xs text-gray-500">Forward time</div>
+                  <div className="h-3 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full bg-purple-600"
+                      style={{ width: forwardWidth }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-xs text-gray-500">
+                    Retraction time
+                  </div>
+                  <div className="h-3 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full bg-purple-300"
+                      style={{ width: retractionWidth }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-5 rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Forward/retraction timing data is not available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SnapCards({
+  title,
+  subtitle,
+  events,
+}: {
+  title: string;
+  subtitle?: string;
+  events: any[];
+}) {
+  const topEvents = [...events]
+    .filter((event) => Number.isFinite(Number(event.peakJerk)))
+    .sort((a, b) => Number(b.peakJerk) - Number(a.peakJerk))
+    .slice(0, 5);
+
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+      {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
+
+      {topEvents.length > 0 ? (
+        <div className="mt-5 space-y-3">
+          {topEvents.map((event, index) => (
+            <div
+              key={`${event.eventId}-${index}`}
+              className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm"
+            >
+              <div>
+                <p className="font-semibold text-gray-800">
+                  #{event.eventId || index + 1} {event.type || "Punch"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Higher snap means a sharper strike.
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-xl font-bold text-purple-600">
+                  {Number(event.peakJerk).toFixed(2)}
+                </p>
+                <p className="text-xs text-gray-500">g/s</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-5 rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Punch snap data is not available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventSnapshotFigure({
+  title,
+  subtitle,
+  events,
+}: {
+  title: string;
+  subtitle?: string;
+  events: any[];
+}) {
+  const samples = events
+    .filter(
+      (event) =>
+        Number.isFinite(Number(event.startTime)) &&
+        Number.isFinite(Number(event.peakTime)) &&
+        Number.isFinite(Number(event.endTime))
+    )
+    .slice(0, 3);
+
+  if (samples.length === 0) {
+    return (
+      <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+        <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+        {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
+        <div className="mt-5 rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Start / peak / end data is not available.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+      {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
+
+      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {samples.map((event, index) => {
+          const start = Number(event.startTime);
+          const peak = Number(event.peakTime);
+          const end = Number(event.endTime);
+          const peakAcc = Number(event.peakAcceleration || 1);
+
+          const width = 320;
+          const height = 150;
+          const padding = 24;
+          const span = Math.max(end - start, 0.001);
+
+          const xStart = padding;
+          const xPeak = padding + ((peak - start) / span) * (width - padding * 2);
+          const xEnd = width - padding;
+
+          const yBase = height - padding;
+          const yPeak = padding + 10;
+
+          const curve = `${xStart},${yBase} ${xPeak},${yPeak} ${xEnd},${yBase}`;
+
+          return (
+            <div key={`${event.eventId}-${index}`} className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between text-sm">
+                <span className="font-semibold text-purple-600">
+                  #{event.eventId || index + 1} {event.type || "Punch"}
+                </span>
+                <span className="text-gray-500">
+                  {Number.isFinite(peakAcc) ? `${peakAcc.toFixed(2)}g` : "N/A"}
+                </span>
+              </div>
+
+              <svg viewBox={`0 0 ${width} ${height}`} className="w-full">
+                <rect
+                  x={xStart}
+                  y={yPeak}
+                  width={Math.max(xPeak - xStart, 1)}
+                  height={yBase - yPeak}
+                  fill="#dbeafe"
+                  opacity="0.55"
+                />
+
+                <rect
+                  x={xPeak}
+                  y={yPeak}
+                  width={Math.max(xEnd - xPeak, 1)}
+                  height={yBase - yPeak}
+                  fill="#dcfce7"
+                  opacity="0.55"
+                />
+
+                <polyline
+                  fill="none"
+                  stroke="#2563eb"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={curve}
+                />
+
+                <line
+                  x1={xStart}
+                  x2={xStart}
+                  y1={padding}
+                  y2={yBase}
+                  stroke="#f97316"
+                  strokeWidth="3"
+                />
+
+                <line
+                  x1={xPeak}
+                  x2={xPeak}
+                  y1={padding}
+                  y2={yBase}
+                  stroke="#ef4444"
+                  strokeWidth="3"
+                />
+
+                <line
+                  x1={xEnd}
+                  x2={xEnd}
+                  y1={padding}
+                  y2={yBase}
+                  stroke="#7c3aed"
+                  strokeWidth="3"
+                />
+
+                <text x={xStart} y={height - 6} fontSize="10" fill="#f97316">
+                  Start
+                </text>
+                <text
+                  x={xPeak}
+                  y={height - 6}
+                  fontSize="10"
+                  fill="#ef4444"
+                  textAnchor="middle"
+                >
+                  Peak
+                </text>
+                <text
+                  x={xEnd}
+                  y={height - 6}
+                  fontSize="10"
+                  fill="#7c3aed"
+                  textAnchor="end"
+                >
+                  End
+                </text>
+              </svg>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                <div>Forward: {Number(event.forwardTime || 0).toFixed(3)}s</div>
+                <div>
+                  Retraction: {Number(event.retractionTime || 0).toFixed(3)}s
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 text-xs text-gray-500">
+        This figure uses start, peak and end markers returned by the backend.
+        It explains the metric concept visually; a true acceleration curve needs
+        full signal curve data from the backend.
+      </p>
+    </div>
+  );
+}
+
+function CoachingCards({
+  items,
+}: {
+  items: { title?: string; message?: string; severity?: string }[];
+}) {
+  const getClass = (severity?: string) => {
+    if (severity === "positive") {
+      return "border-green-100 bg-green-50 text-green-800";
+    }
+
+    if (severity === "warning") {
+      return "border-yellow-100 bg-yellow-50 text-yellow-800";
+    }
+
+    return "border-purple-100 bg-purple-50 text-purple-800";
+  };
+
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <CheckCircle className="text-purple-600" size={22} />
+        <h3 className="text-xl font-bold text-gray-800">Coaching Insights</h3>
+      </div>
+
+      {items.length > 0 ? (
+        <div className="space-y-3">
+          {items.map((item, index) => (
+            <div
+              key={`${item.title}-${index}`}
+              className={`rounded-2xl border p-4 ${getClass(item.severity)}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold">
+                  {item.title || `Insight ${index + 1}`}
+                </p>
+                <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-semibold">
+                  {item.severity || "info"}
+                </span>
+              </div>
+              <p className="mt-2 text-sm leading-6">
+                {item.message || "No message available."}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Coaching insights are not available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventTable({ events }: { events: any[] }) {
+  const formatSeconds = (value: any) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num.toFixed(3)}s` : "N/A";
+  };
+
+  const formatNumber = (value: any, suffix = "", digits = 2) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num.toFixed(digits)}${suffix}` : "N/A";
+  };
+
+  return (
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <h3 className="text-xl font-bold text-gray-800">Event-Level Table</h3>
+      <p className="mt-2 text-sm text-gray-500">
+        Detailed punch-by-punch review for users who want deeper analysis.
+      </p>
+
+      {events.length > 0 ? (
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full border-separate border-spacing-y-2 text-left text-sm">
+            <thead>
+              <tr className="text-gray-500">
+                <th className="px-4 py-2">Punch Type</th>
+                <th className="px-4 py-2">Start</th>
+                <th className="px-4 py-2">Peak</th>
+                <th className="px-4 py-2">End</th>
+                <th className="px-4 py-2">Forward</th>
+                <th className="px-4 py-2">Retraction</th>
+                <th className="px-4 py-2">Peak Acc</th>
+                <th className="px-4 py-2">Snap / Jerk</th>
+                <th className="px-4 py-2">Rotation</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {events.slice(0, 20).map((event, index) => (
+                <tr key={`${event.eventId}-${index}`} className="bg-white text-gray-700">
+                  <td className="rounded-l-2xl px-4 py-3 font-semibold text-purple-600">
+                    {event.type || "Unknown"}
+                  </td>
+                  <td className="px-4 py-3">{formatSeconds(event.startTime)}</td>
+                  <td className="px-4 py-3">{formatSeconds(event.peakTime)}</td>
+                  <td className="px-4 py-3">{formatSeconds(event.endTime)}</td>
+                  <td className="px-4 py-3">{formatSeconds(event.forwardTime)}</td>
+                  <td className="px-4 py-3">
+                    {formatSeconds(event.retractionTime)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {formatNumber(event.peakAcceleration, "g", 2)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {formatNumber(event.peakJerk, "g/s", 2)}
+                  </td>
+                  <td className="rounded-r-2xl px-4 py-3">
+                    {formatNumber(event.peakRotation, " deg/s", 1)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="mt-5 rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Event-level data is not available.
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function InsightsPage() {
   const navigate = useNavigate();
   const params = useParams();
-
   const sessionId = params.sessionId || params.id || "";
 
   const [session, setSession] = useState<Session | null>(null);
@@ -90,29 +745,20 @@ export default function InsightsPage() {
 
   const pollingRef = useRef<number | null>(null);
 
-  const getToken = () => {
-    return (
-      localStorage.getItem("token") ||
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("authToken") ||
-      localStorage.getItem("jwt")
-    );
-  };
+  const getToken = () =>
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("authToken") ||
+    localStorage.getItem("jwt");
 
   const getAuthHeaders = (): HeadersInit => {
     const token = getToken();
-
-    if (!token) return {};
-
-    return {
-      Authorization: `Bearer ${token}`,
-    };
+    return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
   const readErrorText = async (res: Response) => {
     try {
-      const text = await res.text();
-      return text || res.statusText;
+      return (await res.text()) || res.statusText;
     } catch {
       return res.statusText;
     }
@@ -120,24 +766,18 @@ export default function InsightsPage() {
 
   const formatDate = (value?: string) => {
     if (!value) return "N/A";
-
     const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) return "N/A";
-
-    return date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? "N/A" : date.toLocaleString();
   };
 
   const formatSeconds = (value: any) => {
-    const numberValue = Number(value);
-    return Number.isFinite(numberValue) ? `${numberValue.toFixed(3)}s` : "N/A";
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num.toFixed(3)}s` : "N/A";
   };
 
   const formatNumber = (value: any, suffix = "", digits = 2) => {
-    const numberValue = Number(value);
-    return Number.isFinite(numberValue)
-      ? `${numberValue.toFixed(digits)}${suffix}`
-      : "N/A";
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num.toFixed(digits)}${suffix}` : "N/A";
   };
 
   const normaliseSessionResponse = (
@@ -152,62 +792,47 @@ export default function InsightsPage() {
       data ||
       {};
 
-    const dataWrapper = data?.data || data || {};
+    const wrapper = data?.data || data || {};
 
     return {
       ...(previousSession || {}),
       ...base,
-
-      id: base.id || dataWrapper.id || previousSession?.id || sessionId,
-
+      id: base.id || wrapper.id || previousSession?.id || sessionId,
       title:
         base.title ||
-        dataWrapper.title ||
+        wrapper.title ||
         previousSession?.title ||
         `Session ${sessionId.slice(0, 8)}`,
-
-      status:
-        base.status || dataWrapper.status || previousSession?.status || "N/A",
-
+      status: base.status || wrapper.status || previousSession?.status || "N/A",
       processingStatus:
         base.processingStatus ||
-        dataWrapper.processingStatus ||
+        wrapper.processingStatus ||
         previousSession?.processingStatus ||
         "N/A",
-
       canFetchResults:
         base.canFetchResults ??
-        dataWrapper.canFetchResults ??
+        wrapper.canFetchResults ??
         previousSession?.canFetchResults,
-
       csvUploadStatus:
         base.csvUploadStatus ||
-        dataWrapper.csvUploadStatus ||
+        wrapper.csvUploadStatus ||
         previousSession?.csvUploadStatus,
-
       movUploadStatus:
         base.movUploadStatus ||
-        dataWrapper.movUploadStatus ||
+        wrapper.movUploadStatus ||
         previousSession?.movUploadStatus,
-
       sessionDate:
-        base.sessionDate ||
-        dataWrapper.sessionDate ||
-        previousSession?.sessionDate,
-
+        base.sessionDate || wrapper.sessionDate || previousSession?.sessionDate,
       sessionStartAt:
         base.sessionStartAt ||
-        dataWrapper.sessionStartAt ||
+        wrapper.sessionStartAt ||
         previousSession?.sessionStartAt,
-
-      createdAt:
-        base.createdAt || dataWrapper.createdAt || previousSession?.createdAt,
+      createdAt: base.createdAt || wrapper.createdAt || previousSession?.createdAt,
     };
   };
 
   const isAnalysisFinished = (targetSession: Session | null) => {
     if (!targetSession) return false;
-
     return (
       targetSession.canFetchResults === true ||
       targetSession.status === "completed" ||
@@ -217,7 +842,6 @@ export default function InsightsPage() {
 
   const isAnalysisFailed = (targetSession: Session | null) => {
     if (!targetSession) return false;
-
     return (
       targetSession.status === "failed" ||
       targetSession.processingStatus === "failed"
@@ -227,37 +851,29 @@ export default function InsightsPage() {
   const isAnalysisRunning = (targetSession: Session | null) => {
     if (!targetSession) return false;
 
-    const status = targetSession.status || "";
-    const processingStatus = targetSession.processingStatus || "";
-
     return (
-      status === "processing" ||
-      processingStatus === "queued" ||
-      processingStatus === "preprocessing" ||
-      processingStatus === "inferencing" ||
-      processingStatus === "processing"
+      targetSession.status === "processing" ||
+      ["queued", "preprocessing", "inferencing", "processing"].includes(
+        targetSession.processingStatus || ""
+      )
     );
   };
 
-  const getVideoUrlFromResponse = (data: any) => {
-    return (
-      data?.videoUrl ||
-      data?.url ||
-      data?.presignedUrl ||
-      data?.signedUrl ||
-      data?.annotatedVideoUrl ||
-      data?.data?.videoUrl ||
-      data?.data?.url ||
-      data?.data?.presignedUrl ||
-      data?.result?.videoUrl ||
-      data?.result?.url ||
-      ""
-    );
-  };
+  const getVideoUrlFromResponse = (data: any) =>
+    data?.videoUrl ||
+    data?.url ||
+    data?.presignedUrl ||
+    data?.signedUrl ||
+    data?.annotatedVideoUrl ||
+    data?.data?.videoUrl ||
+    data?.data?.url ||
+    data?.data?.presignedUrl ||
+    data?.result?.videoUrl ||
+    data?.result?.url ||
+    "";
 
   const normaliseInsights = (data: any): InsightResult => {
     const source = data?.data || data?.result || data?.results || data || {};
-
     const metricsArray = Array.isArray(source.metrics) ? source.metrics : [];
     const rawPunchEvents = Array.isArray(source.punchEvents)
       ? source.punchEvents
@@ -266,20 +882,18 @@ export default function InsightsPage() {
     const advancedInsights: AdvancedInsights | null =
       source.advancedInsights ||
       source.advanced_insights ||
-      source.data?.advancedInsights ||
+      data?.data?.advancedInsights ||
       null;
 
-    const advancedEventMetrics = Array.isArray(advancedInsights?.eventMetrics)
+    const advancedEvents = Array.isArray(advancedInsights?.eventMetrics)
       ? advancedInsights?.eventMetrics || []
       : [];
 
     const advancedByEventId = new Map<number, any>();
 
-    advancedEventMetrics.forEach((event: any, index: number) => {
+    advancedEvents.forEach((event: any, index: number) => {
       const eventId = Number(event.eventId || index + 1);
-      if (Number.isFinite(eventId)) {
-        advancedByEventId.set(eventId, event);
-      }
+      if (Number.isFinite(eventId)) advancedByEventId.set(eventId, event);
     });
 
     const getMetric = (name: string) => {
@@ -287,23 +901,36 @@ export default function InsightsPage() {
       return item?.value ?? "N/A";
     };
 
-    const toNumber = (value: any) => {
-      const numberValue = Number(value);
-      return Number.isFinite(numberValue) ? numberValue : 0;
+    const getMetricAny = (names: string[]) => {
+      for (const name of names) {
+        const value = getMetric(name);
+        if (value !== "N/A") return value;
+      }
+      return "N/A";
     };
 
-    const uppercutCount = toNumber(getMetric("count_Uppercut"));
-    const hookCount = toNumber(getMetric("count_Hook"));
-    const jabCount = toNumber(getMetric("count_Jab"));
+    const toNumber = (value: any) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
 
-    const punchCounts = [
-      { type: "Uppercut", value: uppercutCount },
-      { type: "Hook", value: hookCount },
+    const jabCount = toNumber(
+      getMetricAny(["count_Jab", "count_jab", "jabCount"])
+    );
+    const hookCount = toNumber(
+      getMetricAny(["count_Hook", "count_hook", "hookCount"])
+    );
+    const uppercutCount = toNumber(
+      getMetricAny(["count_Uppercut", "count_uppercut", "uppercutCount"])
+    );
+
+    const counts = [
       { type: "Jab", value: jabCount },
+      { type: "Hook", value: hookCount },
+      { type: "Uppercut", value: uppercutCount },
     ];
 
-    const dominantPunch =
-      [...punchCounts].sort((a, b) => b.value - a.value)[0]?.type || "N/A";
+    const dominant = [...counts].sort((a, b) => b.value - a.value)[0];
 
     const totalPunches =
       source.totalPunches ||
@@ -320,67 +947,26 @@ export default function InsightsPage() {
       source.session_duration_secs ||
       getMetric("sessionDurationSecs");
 
-    const ppmNumber = toNumber(punchesPerMinute);
-
-    const punchRate =
-      punchesPerMinute !== "N/A"
-        ? `${Number(punchesPerMinute).toFixed(2)} punches/min`
-        : "N/A";
-
-    const sessionDuration =
-      sessionDurationSecs !== "N/A"
-        ? `${Number(sessionDurationSecs).toFixed(1)} sec`
-        : "N/A";
-
-    const workRateZone =
-      ppmNumber >= 60
-        ? "Very high output"
-        : ppmNumber >= 40
-        ? "High output"
-        : ppmNumber >= 20
-        ? "Controlled pace"
-        : ppmNumber > 0
-        ? "Low output"
-        : "N/A";
-
-    const activePunchCounts = [uppercutCount, hookCount, jabCount].filter(
-      (value) => value > 0
-    );
-
-    const maxPunchCount = Math.max(uppercutCount, hookCount, jabCount, 1);
-    const minPunchCount =
-      activePunchCounts.length > 0 ? Math.min(...activePunchCounts) : 0;
-
-    const mixBalanceScore = Math.round((minPunchCount / maxPunchCount) * 100);
-
-    const punchMixBalance =
-      mixBalanceScore >= 70
-        ? "Balanced punch mix"
-        : mixBalanceScore >= 40
-        ? "Moderately varied"
-        : "One punch type dominates";
-
     const sortedEvents = [...rawPunchEvents]
       .map((event: any, index: number) => {
         const eventId = Number(event.eventId || index + 1);
-        const advancedEvent = advancedByEventId.get(eventId) || {};
+        const advanced = advancedByEventId.get(eventId) || {};
 
         return {
           ...event,
           eventId,
-          startTime: event.startTime ?? advancedEvent.startTime,
-          peakTime: event.peakTime ?? advancedEvent.peakTime,
-          endTime: event.endTime ?? advancedEvent.endTime,
-          forwardTime: event.forwardTime ?? advancedEvent.forwardTime,
-          retractionTime:
-            event.retractionTime ?? advancedEvent.retractionTime,
+          startTime: event.startTime ?? advanced.startTime,
+          peakTime: event.peakTime ?? advanced.peakTime,
+          endTime: event.endTime ?? advanced.endTime,
+          forwardTime: event.forwardTime ?? advanced.forwardTime,
+          retractionTime: event.retractionTime ?? advanced.retractionTime,
           peakAcceleration:
-            event.peakAcceleration ?? advancedEvent.peakAcceleration,
-          peakJerk: event.peakJerk ?? advancedEvent.peakJerk,
+            event.peakAcceleration ?? advanced.peakAcceleration,
+          peakJerk: event.peakJerk ?? advanced.peakJerk,
           avgRetractionAcceleration:
             event.avgRetractionAcceleration ??
-            advancedEvent.avgRetractionAcceleration,
-          peakRotation: event.peakRotation ?? advancedEvent.peakRotation,
+            advanced.avgRetractionAcceleration,
+          peakRotation: event.peakRotation ?? advanced.peakRotation,
         };
       })
       .sort((a, b) => {
@@ -393,73 +979,50 @@ export default function InsightsPage() {
       .map((event: any) => Number(event.confidence))
       .filter((value) => Number.isFinite(value));
 
-    const avgConfidenceValue =
+    const avgConfidenceNumber =
       confidenceValues.length > 0
         ? confidenceValues.reduce((sum, value) => sum + value, 0) /
           confidenceValues.length
         : 0;
 
-    const avgConfidence =
-      confidenceValues.length > 0
-        ? `${(avgConfidenceValue * 100).toFixed(1)}%`
-        : "N/A";
+    const maxCount = Math.max(...counts.map((item) => item.value), 1);
+    const minCount = Math.min(...counts.filter((item) => item.value > 0).map((item) => item.value), maxCount);
+    const balanceRatio = minCount / maxCount;
 
-    const punchTimes = sortedEvents
-      .map((event: any) => Number(event.t || event.time || event.timestamp))
-      .filter((value) => Number.isFinite(value));
-
-    const punchGaps = punchTimes
-      .slice(1)
-      .map((time, index) => time - punchTimes[index])
-      .filter((gap) => Number.isFinite(gap) && gap > 0);
-
-    const combinationGaps = punchGaps.filter((gap) => gap <= 10);
-
-    const avgCombinationGapValue =
-      combinationGaps.length > 0
-        ? combinationGaps.reduce((sum, value) => sum + value, 0) /
-          combinationGaps.length
-        : 0;
-
-    const longestInactiveGapValue =
-      punchGaps.length > 0 ? Math.max(...punchGaps) : 0;
-
-    const avgCombinationGap =
-      combinationGaps.length > 0
-        ? `${avgCombinationGapValue.toFixed(2)}s`
-        : "N/A";
-
-    const longestInactiveGap =
-      punchGaps.length > 0 ? `${longestInactiveGapValue.toFixed(2)}s` : "N/A";
-
-    const recommendations = [
-      `Your dominant punch was ${dominantPunch}. Review whether this matches the training goal for this session.`,
-      `Your work rate was ${punchRate}, which is classified as ${workRateZone.toLowerCase()}.`,
-      punchMixBalance === "One punch type dominates"
-        ? "Your punch mix is heavily weighted toward one punch type. Try adding more varied combinations."
-        : "Your punch mix shows useful variation. Keep building combinations rather than relying on only one punch type.",
-      avgCombinationGap !== "N/A"
-        ? `Your average combination gap was ${avgCombinationGap}. Use the video to check whether your rhythm stays controlled between punches.`
-        : "Combination rhythm could not be calculated from the current event data.",
-    ];
+    const punchMixInsight =
+      balanceRatio >= 0.7
+        ? "The punch mix was balanced."
+        : `${dominant.type} was the dominant punch type in this session.`;
 
     return {
       totalPunches,
-      punchRate,
-      sessionDuration,
-      dominantPunch,
-
-      workRateZone,
-      punchMixBalance,
-      avgConfidence,
-      avgCombinationGap,
-      longestInactiveGap,
-
-      uppercutCount,
-      hookCount,
+      punchRate:
+        punchesPerMinute !== "N/A"
+          ? `${Number(punchesPerMinute).toFixed(2)} punches/min`
+          : "N/A",
+      sessionDuration:
+        sessionDurationSecs !== "N/A"
+          ? `${Number(sessionDurationSecs).toFixed(1)} sec`
+          : "N/A",
+      dominantPunch: dominant?.type || "N/A",
+      avgConfidence:
+        confidenceValues.length > 0
+          ? `${(avgConfidenceNumber * 100).toFixed(1)}%`
+          : "N/A",
+      avgPeakAcceleration: formatNumber(
+        advancedInsights?.summary?.averagePeakAcceleration,
+        "g",
+        2
+      ),
+      punchMixInsight,
       jabCount,
-
-      recommendations,
+      hookCount,
+      uppercutCount,
+      recommendations: [
+        punchMixInsight,
+        "Use the video together with the timing and acceleration charts to review punch quality.",
+        "Higher snap means a sharper strike, while slower retraction may indicate delayed recovery back to guard.",
+      ],
       punchEvents: sortedEvents,
       advancedInsights,
     };
@@ -470,10 +1033,7 @@ export default function InsightsPage() {
 
     try {
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
-        method: "GET",
-        headers: {
-          ...getAuthHeaders(),
-        },
+        headers: { ...getAuthHeaders() },
       });
 
       if (res.status === 401) {
@@ -481,15 +1041,11 @@ export default function InsightsPage() {
         return null;
       }
 
-      if (!res.ok) {
-        console.warn("Session detail endpoint failed:", res.status);
-        return null;
-      }
+      if (!res.ok) return null;
 
       const data = await res.json();
       const sessionData = normaliseSessionResponse(data, session);
       setSession(sessionData);
-
       return sessionData;
     } catch (err) {
       console.warn("Could not load session detail:", err);
@@ -502,10 +1058,7 @@ export default function InsightsPage() {
 
     try {
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/status`, {
-        method: "GET",
-        headers: {
-          ...getAuthHeaders(),
-        },
+        headers: { ...getAuthHeaders() },
       });
 
       if (res.status === 401) {
@@ -513,15 +1066,11 @@ export default function InsightsPage() {
         return previous || null;
       }
 
-      if (!res.ok) {
-        console.warn("Session status endpoint failed:", res.status);
-        return previous || null;
-      }
+      if (!res.ok) return previous || null;
 
       const data = await res.json();
       const sessionData = normaliseSessionResponse(data, previous || session);
       setSession(sessionData);
-
       return sessionData;
     } catch (err) {
       console.warn("Could not load session status:", err);
@@ -549,10 +1098,7 @@ export default function InsightsPage() {
       const res = await fetch(
         `${API_BASE_URL}/sessions/${sessionId}/results/video`,
         {
-          method: "GET",
-          headers: {
-            ...getAuthHeaders(),
-          },
+          headers: { ...getAuthHeaders() },
         }
       );
 
@@ -560,14 +1106,6 @@ export default function InsightsPage() {
         setVideoUrl("");
         setVideoMessage(
           "Analysis completed, but no annotated video was returned for this session."
-        );
-        return;
-      }
-
-      if (res.status === 409) {
-        setVideoUrl("");
-        setVideoMessage(
-          "Video is still being prepared. Please refresh results in a moment."
         );
         return;
       }
@@ -623,22 +1161,11 @@ export default function InsightsPage() {
       setInsightMessage("");
 
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/results`, {
-        method: "GET",
-        headers: {
-          ...getAuthHeaders(),
-        },
+        headers: { ...getAuthHeaders() },
       });
 
-      if (res.status === 404) {
-        setInsightMessage("Insight results are not ready yet.");
-        setInsights(normaliseInsights({}));
-        return;
-      }
-
       if (res.status === 409) {
-        setInsightMessage(
-          "Analysis is still processing. Results will appear after ML processing is completed."
-        );
+        setInsightMessage("Analysis is still processing.");
         setInsights(normaliseInsights({}));
         return;
       }
@@ -658,10 +1185,9 @@ export default function InsightsPage() {
 
       const data = await res.json();
       console.log("Insight results response:", data);
-
       setInsights(normaliseInsights(data));
     } catch (err) {
-      console.warn("Insight results not ready:", err);
+      console.warn("Could not load insight results:", err);
       setInsightMessage("Could not load insight results.");
       setInsights(normaliseInsights({}));
     } finally {
@@ -681,22 +1207,14 @@ export default function InsightsPage() {
     }
 
     if (isAnalysisFailed(targetSession)) {
-      setInsightMessage(
-        "Analysis failed. Please check the uploaded files or rerun analysis."
-      );
+      setInsightMessage("Analysis failed.");
       setVideoMessage("Analysis failed, so annotated video is not available.");
       setInsights(normaliseInsights({}));
       return;
     }
 
-    setInsightMessage(
-      "Analysis is still processing. Results will appear after ML processing is completed."
-    );
-
-    setVideoMessage(
-      "Annotated video will appear after ML processing is completed."
-    );
-
+    setInsightMessage("Analysis is still processing.");
+    setVideoMessage("Annotated video will appear after processing.");
     setInsights(normaliseInsights({}));
   };
 
@@ -715,12 +1233,7 @@ export default function InsightsPage() {
 
       if (!currentSession) return;
 
-      if (isAnalysisFinished(currentSession)) {
-        clearPolling();
-        await loadResultsIfReady(currentSession);
-      }
-
-      if (isAnalysisFailed(currentSession)) {
+      if (isAnalysisFinished(currentSession) || isAnalysisFailed(currentSession)) {
         clearPolling();
         await loadResultsIfReady(currentSession);
       }
@@ -749,12 +1262,7 @@ export default function InsightsPage() {
       }
     } catch (err) {
       console.error(err);
-
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Could not load insights page.");
-      }
+      setError("Could not load insights page.");
     } finally {
       setPageLoading(false);
     }
@@ -775,8 +1283,8 @@ export default function InsightsPage() {
     try {
       setAnalyzeLoading(true);
       setError("");
-      setVideoMessage("");
       setInsightMessage("");
+      setVideoMessage("");
 
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/analyze`, {
         method: "POST",
@@ -791,44 +1299,21 @@ export default function InsightsPage() {
         return;
       }
 
-      if (res.status === 409) {
-        setInsightMessage(
-          "Analysis has already started or is still processing. The page will keep checking the status."
-        );
-
-        const currentSession = await loadSessionStatus(session);
-        if (currentSession && isAnalysisRunning(currentSession)) {
-          startPolling();
-        }
-
-        return;
-      }
-
-      if (!res.ok) {
+      if (!res.ok && res.status !== 409) {
         const text = await readErrorText(res);
         setError(`Could not start analysis: ${res.status} ${text}`);
         return;
       }
 
       const currentSession = await loadSessionStatus(session);
-
-      setInsightMessage(
-        "Analysis has started. This page will automatically refresh when results are ready."
-      );
-
-      if (currentSession) {
-        startPolling();
-      }
+      setInsightMessage("Analysis has started.");
+      if (currentSession) startPolling();
     } catch (err) {
       console.error(err);
       setError("Could not start analysis.");
     } finally {
       setAnalyzeLoading(false);
     }
-  };
-
-  const handleRefreshAll = async () => {
-    await loadPage();
   };
 
   const statusClass = (status?: string) => {
@@ -861,27 +1346,18 @@ export default function InsightsPage() {
   const canRunAnalysis = useMemo(() => {
     if (!session) return false;
 
-    const hasCsvUploaded = session.csvUploadStatus === "uploaded";
-    const hasMovUploaded = session.movUploadStatus === "uploaded";
-
     return (
       session.status === "ready" &&
-      hasCsvUploaded &&
-      hasMovUploaded &&
+      session.csvUploadStatus === "uploaded" &&
+      session.movUploadStatus === "uploaded" &&
       !isAnalysisRunning(session) &&
       !isAnalysisFinished(session)
     );
   }, [session]);
 
   const advanced = insights?.advancedInsights;
-  const advancedSummary = advanced?.summary || {};
-
   const advancedEvents = Array.isArray(advanced?.eventMetrics)
     ? advanced?.eventMetrics || []
-    : [];
-
-  const advancedCadenceBlocks = Array.isArray(advanced?.cadenceBlocks)
-    ? advanced?.cadenceBlocks || []
     : [];
 
   const punchTypeAverages = Array.isArray(advanced?.punchTypeAverages)
@@ -892,7 +1368,7 @@ export default function InsightsPage() {
     ? advanced?.coachingInsights || []
     : [];
 
-  const metricCards = [
+  const summaryCards = [
     {
       label: "Total Punches",
       value: insights?.totalPunches ?? "N/A",
@@ -913,274 +1389,94 @@ export default function InsightsPage() {
       value: insights?.dominantPunch ?? "N/A",
       icon: Target,
     },
-  ];
-
-  const athleteInsightCards = [
-    {
-      label: "Work Rate Zone",
-      value: insights?.workRateZone ?? "N/A",
-      note: "Training intensity based on punches per minute.",
-      icon: Activity,
-    },
-    {
-      label: "Punch Mix Balance",
-      value: insights?.punchMixBalance ?? "N/A",
-      note: "Shows whether one punch type is dominating.",
-      icon: Target,
-    },
     {
       label: "Average Confidence",
       value: insights?.avgConfidence ?? "N/A",
-      note: "Average model confidence for punch classification.",
       icon: ShieldCheck,
     },
     {
-      label: "Avg Combination Gap",
-      value: insights?.avgCombinationGap ?? "N/A",
-      note: "Average time between nearby detected punches.",
-      icon: Timer,
-    },
-    {
-      label: "Longest Inactive Gap",
-      value: insights?.longestInactiveGap ?? "N/A",
-      note: "Longest pause between detected punches.",
-      icon: TrendingUp,
-    },
-  ];
-
-  const advancedMetricCards = [
-    {
-      label: "Avg Forward Time",
-      value: formatSeconds(advancedSummary.averageForwardTime),
-      note: "Estimated time from punch start to peak movement.",
-    },
-    {
-      label: "Avg Retraction Time",
-      value: formatSeconds(advancedSummary.averageRetractionTime),
-      note: "Estimated time from peak movement to movement end.",
-    },
-    {
       label: "Avg Peak Acceleration",
-      value: formatNumber(advancedSummary.averagePeakAcceleration, "g", 2),
-      note: "Average maximum acceleration across detected punches.",
-    },
-    {
-      label: "Max Peak Acceleration",
-      value: formatNumber(advancedSummary.maxPeakAcceleration, "g", 2),
-      note: "Strongest detected punch acceleration.",
-    },
-    {
-      label: "Avg Punch Snap",
-      value: formatNumber(advancedSummary.averagePeakJerk, "g/s", 2),
-      note: "Rate of acceleration change during punch extension.",
-    },
-    {
-      label: "Avg Peak Rotation",
-      value: formatNumber(advancedSummary.averagePeakRotation, " deg/s", 1),
-      note: "Estimated fist turnover and angular speed.",
+      value: insights?.avgPeakAcceleration ?? "N/A",
+      icon: Gauge,
     },
   ];
 
-  const punchBreakdown = [
+  const donutItems = [
     {
-      label: "Uppercut",
-      value: insights?.uppercutCount ?? 0,
+      label: "Jab",
+      value: Number(insights?.jabCount || 0),
+      color: "#8b5cf6",
     },
     {
       label: "Hook",
-      value: insights?.hookCount ?? 0,
+      value: Number(insights?.hookCount || 0),
+      color: "#c084fc",
     },
     {
-      label: "Jab",
-      value: insights?.jabCount ?? 0,
+      label: "Uppercut",
+      value: Number(insights?.uppercutCount || 0),
+      color: "#ddd6fe",
     },
   ];
 
-  const maxPunchTypeValue = Math.max(
-    ...punchBreakdown.map((item) => Number(item.value) || 0),
-    1
-  );
-
-  const sortedEventsWithGap = useMemo(() => {
-    const events = insights?.punchEvents || [];
-
-    if (!Array.isArray(events) || events.length === 0) return [];
-
-    return [...events]
-      .sort((a, b) => {
-        const timeA = Number(a.t || a.time || a.timestamp || 0);
-        const timeB = Number(b.t || b.time || b.timestamp || 0);
-        return timeA - timeB;
-      })
-      .map((event: any, index: number, array: any[]) => {
-        const currentTime = Number(event.t || event.time || event.timestamp || 0);
-
-        const previousTime =
-          index > 0
-            ? Number(
-                array[index - 1].t ||
-                  array[index - 1].time ||
-                  array[index - 1].timestamp ||
-                  0
-              )
-            : null;
-
-        const gap =
-          previousTime !== null && Number.isFinite(previousTime)
-            ? currentTime - previousTime
-            : null;
-
-        return {
-          ...event,
-          gapFromPrevious:
-            gap !== null && Number.isFinite(gap) && gap > 0 ? gap : null,
-        };
-      });
-  }, [insights]);
-
-  const eventPreview = sortedEventsWithGap.slice(0, 10);
-
-  const cadenceBlocks = useMemo(() => {
-    if (advancedCadenceBlocks.length > 0) {
-      return advancedCadenceBlocks.map((block: any) => ({
-        label: `${block.startTime}-${block.endTime}s`,
-        value: Number(block.punchCount) || 0,
-        ppm: Number(block.punchesPerMinute) || 0,
+  const groupedTimingData = (() => {
+    if (punchTypeAverages.length > 0) {
+      return punchTypeAverages.map((item: any) => ({
+        label: item.type || "Unknown",
+        forward: Number(item.avgForwardTime) || 0,
+        retraction: Number(item.avgRetractionTime) || 0,
       }));
     }
 
-    const events = insights?.punchEvents || [];
+    const grouped: Record<string, { count: number; forward: number; retraction: number }> =
+      {};
 
-    if (!Array.isArray(events) || events.length === 0) return [];
-
-    const bucketSize = 15;
-    const buckets: Record<string, number> = {};
-
-    events.forEach((event: any) => {
-      const time = Number(event.t || event.time || event.timestamp || 0);
-
-      if (!Number.isFinite(time)) return;
-
-      const bucketStart = Math.floor(time / bucketSize) * bucketSize;
-      const bucketLabel = `${bucketStart}-${bucketStart + bucketSize}s`;
-
-      buckets[bucketLabel] = (buckets[bucketLabel] || 0) + 1;
-    });
-
-    return Object.entries(buckets).map(([label, value]) => ({
-      label,
-      value,
-      ppm: (value / bucketSize) * 60,
-    }));
-  }, [insights, advancedCadenceBlocks]);
-
-  const maxCadenceValue = Math.max(
-    ...cadenceBlocks.map((item) => Number(item.value) || 0),
-    1
-  );
-
-  const confidenceBreakdown = useMemo(() => {
-    const events = insights?.punchEvents || [];
-
-    if (!Array.isArray(events) || events.length === 0) return [];
-
-    const buckets = {
-      "High ≥90%": 0,
-      "Medium 70-89%": 0,
-      "Low <70%": 0,
-    };
-
-    events.forEach((event: any) => {
-      const confidence = Number(event.confidence);
-
-      if (!Number.isFinite(confidence)) return;
-
-      if (confidence >= 0.9) {
-        buckets["High ≥90%"] += 1;
-      } else if (confidence >= 0.7) {
-        buckets["Medium 70-89%"] += 1;
-      } else {
-        buckets["Low <70%"] += 1;
+    advancedEvents.forEach((event: any) => {
+      const type = event.type || "Unknown";
+      if (!grouped[type]) {
+        grouped[type] = { count: 0, forward: 0, retraction: 0 };
       }
+
+      grouped[type].count += 1;
+      grouped[type].forward += Number(event.forwardTime) || 0;
+      grouped[type].retraction += Number(event.retractionTime) || 0;
     });
 
-    return Object.entries(buckets).map(([label, value]) => ({
+    return Object.entries(grouped).map(([label, value]) => ({
       label,
-      value,
+      forward: value.count ? value.forward / value.count : 0,
+      retraction: value.count ? value.retraction / value.count : 0,
     }));
-  }, [insights]);
+  })();
 
-  const maxConfidenceValue = Math.max(
-    ...confidenceBreakdown.map((item) => Number(item.value) || 0),
-    1
-  );
+  const peakAccelerationTrend = advancedEvents
+    .filter((event: any) => Number.isFinite(Number(event.peakAcceleration)))
+    .slice(0, 20)
+    .map((event: any, index: number) => ({
+      label: `#${event.eventId || index + 1}`,
+      value: Number(event.peakAcceleration),
+    }));
 
-  const combinationGapChart = useMemo(() => {
-    return sortedEventsWithGap
-      .filter(
-        (event: any) =>
-          event.gapFromPrevious !== null &&
-          event.gapFromPrevious > 0 &&
-          event.gapFromPrevious <= 10
-      )
-      .slice(0, 12)
-      .map((event: any) => ({
-        label: `${Number(event.t || event.time || 0).toFixed(1)}s`,
-        value: Number(event.gapFromPrevious),
-      }));
-  }, [sortedEventsWithGap]);
+  const retractionFatigueTrend = advancedEvents
+    .filter((event: any) =>
+      Number.isFinite(Number(event.avgRetractionAcceleration))
+    )
+    .slice(0, 20)
+    .map((event: any, index: number) => ({
+      label: `#${event.eventId || index + 1}`,
+      value: Number(event.avgRetractionAcceleration),
+    }));
 
-  const maxCombinationGap = Math.max(
-    ...combinationGapChart.map((item) => Number(item.value) || 0),
-    1
-  );
-
-  const timingChart = advancedEvents.slice(0, 12).map((event: any) => ({
-    label: `${event.eventId || ""} ${event.type || ""}`,
-    forwardTime: Number(event.forwardTime) || 0,
-    retractionTime: Number(event.retractionTime) || 0,
-  }));
-
-  const maxTimingValue = Math.max(
-    ...timingChart.flatMap((item) => [item.forwardTime, item.retractionTime]),
-    1
-  );
-
-  const accelerationChart = advancedEvents.slice(0, 12).map((event: any) => ({
-    label: `${event.eventId || ""} ${event.type || ""}`,
-    value: Number(event.peakAcceleration) || 0,
-  }));
-
-  const maxAccelerationValue = Math.max(
-    ...accelerationChart.map((item) => item.value),
-    1
-  );
-
-  const jerkChart = advancedEvents.slice(0, 12).map((event: any) => ({
-    label: `${event.eventId || ""} ${event.type || ""}`,
-    value: Number(event.peakJerk) || 0,
-  }));
-
-  const maxJerkValue = Math.max(...jerkChart.map((item) => item.value), 1);
-
-  const rotationChart = advancedEvents.slice(0, 12).map((event: any) => ({
-    label: `${event.eventId || ""} ${event.type || ""}`,
-    value: Number(event.peakRotation) || 0,
-  }));
-
-  const maxRotationValue = Math.max(
-    ...rotationChart.map((item) => item.value),
-    1
-  );
+  const eventTableData =
+    advancedEvents.length > 0 ? advancedEvents : insights?.punchEvents || [];
 
   return (
     <div className="min-h-screen bg-gray-100 px-6 py-10">
-      <div className="mx-auto max-w-7xl rounded-[28px] bg-white px-8 py-10 shadow-sm">
+      <div className="mx-auto max-w-7xl rounded-[32px] bg-white px-8 py-10 shadow-sm">
         <div className="relative mb-10 text-center">
           <button
             onClick={() => navigate("/sessions")}
             className="absolute left-0 top-2 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-purple-600 shadow-sm transition hover:bg-purple-50"
-            aria-label="Back to sessions"
           >
             <ArrowLeft size={24} />
           </button>
@@ -1188,7 +1484,6 @@ export default function InsightsPage() {
           <button
             onClick={() => navigate("/home")}
             className="absolute right-0 top-2 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-purple-600 shadow-sm transition hover:bg-purple-50"
-            aria-label="Go home"
           >
             <Home size={22} />
           </button>
@@ -1198,7 +1493,7 @@ export default function InsightsPage() {
           </h1>
 
           <p className="mt-4 text-lg text-gray-500">
-            Review annotated video, punch timing, acceleration, rhythm, and
+            Review annotated video, punch mechanics, fatigue trends, and
             coaching feedback.
           </p>
         </div>
@@ -1211,14 +1506,14 @@ export default function InsightsPage() {
         )}
 
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+          <div className="rounded-3xl border border-gray-100 bg-gray-50 p-5">
             <p className="text-sm font-semibold text-gray-500">Session</p>
             <p className="mt-2 break-all text-lg font-bold text-purple-600">
               {session?.title || `Session ${sessionId.slice(0, 8)}`}
             </p>
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+          <div className="rounded-3xl border border-gray-100 bg-gray-50 p-5">
             <p className="text-sm font-semibold text-gray-500">
               Session Status
             </p>
@@ -1231,7 +1526,7 @@ export default function InsightsPage() {
             </span>
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+          <div className="rounded-3xl border border-gray-100 bg-gray-50 p-5">
             <p className="text-sm font-semibold text-gray-500">ML Status</p>
             <span
               className={`mt-2 inline-block rounded-full border px-3 py-1 text-sm font-semibold ${statusClass(
@@ -1242,7 +1537,7 @@ export default function InsightsPage() {
             </span>
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+          <div className="rounded-3xl border border-gray-100 bg-gray-50 p-5">
             <p className="text-sm font-semibold text-gray-500">Created</p>
             <p className="mt-2 text-gray-700">
               {formatDate(
@@ -1263,9 +1558,8 @@ export default function InsightsPage() {
                   Annotated Video
                 </h2>
               </div>
-
               <p className="mt-2 text-gray-500">
-                The annotated video appears after ML processing is completed.
+                Visual replay of detected punch movement.
               </p>
             </div>
 
@@ -1289,7 +1583,7 @@ export default function InsightsPage() {
               </button>
 
               <button
-                onClick={handleRefreshAll}
+                onClick={loadPage}
                 className="flex items-center gap-2 rounded-2xl border border-purple-200 bg-white px-5 py-3 font-semibold text-purple-600 transition hover:bg-purple-50"
               >
                 <RefreshCw size={18} />
@@ -1299,51 +1593,29 @@ export default function InsightsPage() {
           </div>
 
           {videoLoading || pageLoading ? (
-            <div className="flex min-h-[360px] items-center justify-center rounded-2xl bg-white">
+            <div className="flex min-h-[360px] items-center justify-center rounded-3xl bg-white">
               <div className="text-center text-gray-500">
                 <RefreshCw className="mx-auto mb-4 animate-spin text-purple-600" />
                 Loading annotated video...
               </div>
             </div>
           ) : videoUrl ? (
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-black">
+            <div className="overflow-hidden rounded-3xl border border-gray-200 bg-black">
               <video
                 key={videoUrl}
                 src={videoUrl}
                 controls
                 preload="metadata"
                 className="h-auto w-full"
-                onLoadedMetadata={(event) => {
-                  const video = event.currentTarget;
-                  console.log("[VIDEO] metadata loaded:", {
-                    duration: video.duration,
-                    videoWidth: video.videoWidth,
-                    videoHeight: video.videoHeight,
-                  });
-                }}
-                onError={(event) => {
-                  const video = event.currentTarget;
-                  console.error("[VIDEO] playback error:", {
-                    code: video.error?.code,
-                    message: video.error?.message,
-                    networkState: video.networkState,
-                    readyState: video.readyState,
-                    src: video.currentSrc,
-                  });
-                }}
-              >
-                Your browser does not support the video tag.
-              </video>
+              />
             </div>
           ) : (
-            <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white">
+            <div className="flex min-h-[360px] items-center justify-center rounded-3xl border border-dashed border-gray-300 bg-white">
               <div className="max-w-md text-center">
                 <Video className="mx-auto mb-4 text-gray-400" size={48} />
-
                 <p className="text-lg font-semibold text-gray-700">
                   Annotated video not available yet
                 </p>
-
                 <p className="mt-2 text-gray-500">
                   {videoMessage ||
                     "The annotated video will appear after processing is completed."}
@@ -1354,16 +1626,15 @@ export default function InsightsPage() {
         </div>
 
         <div className="mt-8 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Activity className="text-purple-600" size={26} />
               <div>
                 <h2 className="text-2xl font-bold text-purple-600">
-                  Performance Insights
+                  Insights Dashboard
                 </h2>
                 <p className="mt-1 text-gray-500">
-                  Training output, punch mechanics, rhythm, and model
-                  confidence.
+                  Six key visuals for end-user understanding.
                 </p>
               </div>
             </div>
@@ -1383,716 +1654,88 @@ export default function InsightsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-            {metricCards.map((item) => {
-              const Icon = item.icon;
-
-              return (
-                <div
-                  key={item.label}
-                  className="rounded-2xl border border-gray-100 bg-gray-50 p-5"
-                >
-                  <Icon className="mb-3 text-purple-600" size={24} />
-                  <p className="text-sm font-semibold text-gray-500">
-                    {item.label}
-                  </p>
-                  <p className="mt-2 text-2xl font-bold text-gray-800">
-                    {item.value}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-6">
-            <div className="mb-4 flex items-center gap-2">
-              <Zap className="text-purple-600" size={22} />
-              <h3 className="text-xl font-bold text-gray-800">
-                Athlete Improvement Dashboard
-              </h3>
-            </div>
-
-            <p className="mb-5 text-sm text-gray-500">
-              These cards turn the ML output into practical training feedback.
-            </p>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-              {athleteInsightCards.map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <div key={item.label} className="rounded-2xl bg-white p-5">
-                    <Icon className="mb-3 text-purple-600" size={22} />
-                    <p className="text-sm font-semibold text-gray-500">
-                      {item.label}
-                    </p>
-                    <p className="mt-2 text-xl font-bold text-purple-600">
-                      {item.value}
-                    </p>
-                    <p className="mt-2 text-sm text-gray-500">{item.note}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {advanced?.available ? (
-            <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-6">
-              <div className="mb-4 flex items-center gap-2">
-                <Zap className="text-purple-600" size={22} />
-                <h3 className="text-xl font-bold text-gray-800">
-                  Advanced Boxing Insights
-                </h3>
-              </div>
-
-              <p className="mb-5 text-sm text-gray-500">
-                These metrics are calculated from the IMU signal around each
-                detected punch. They show punch timing, acceleration, snap,
-                recovery, and rotation.
-              </p>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {advancedMetricCards.map((item) => (
-                  <div key={item.label} className="rounded-2xl bg-white p-5">
-                    <p className="text-sm font-semibold text-gray-500">
-                      {item.label}
-                    </p>
-                    <p className="mt-2 text-2xl font-bold text-purple-600">
-                      {item.value}
-                    </p>
-                    <p className="mt-2 text-sm text-gray-500">{item.note}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-6 rounded-2xl border border-yellow-100 bg-yellow-50 p-5 text-yellow-700">
-              <p className="font-semibold">Advanced insights not available</p>
-              <p className="mt-1 text-sm">
-                {advanced?.reason ||
-                  "The backend did not return advancedInsights for this session."}
-              </p>
-            </div>
-          )}
-
-          {advanced?.available && (
-            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <Timer className="text-purple-600" size={22} />
-                  <h3 className="text-xl font-bold text-gray-800">
-                    Forward vs Retraction Time
-                  </h3>
-                </div>
-
-                <p className="mb-5 text-sm text-gray-500">
-                  Forward time shows punch delivery speed. Retraction time
-                  shows recovery speed back from the peak movement.
-                </p>
-
-                {timingChart.length > 0 ? (
-                  <div className="space-y-4">
-                    {timingChart.map((item) => {
-                      const forwardWidth = `${Math.max(
-                        (item.forwardTime / maxTimingValue) * 100,
-                        4
-                      )}%`;
-
-                      const retractionWidth = `${Math.max(
-                        (item.retractionTime / maxTimingValue) * 100,
-                        4
-                      )}%`;
-
-                      return (
-                        <div key={item.label} className="rounded-xl bg-white p-4">
-                          <div className="mb-2 flex items-center justify-between text-sm">
-                            <span className="font-semibold text-gray-700">
-                              {item.label}
-                            </span>
-                            <span className="text-gray-500">
-                              F {item.forwardTime.toFixed(3)}s / R{" "}
-                              {item.retractionTime.toFixed(3)}s
-                            </span>
-                          </div>
-
-                          <div className="mb-2">
-                            <div className="mb-1 text-xs text-gray-500">
-                              Forward
-                            </div>
-                            <div className="h-3 overflow-hidden rounded-full bg-gray-100">
-                              <div
-                                className="h-full rounded-full bg-purple-500"
-                                style={{ width: forwardWidth }}
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="mb-1 text-xs text-gray-500">
-                              Retraction
-                            </div>
-                            <div className="h-3 overflow-hidden rounded-full bg-gray-100">
-                              <div
-                                className="h-full rounded-full bg-purple-300"
-                                style={{ width: retractionWidth }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                    Timing data is not available.
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <TrendingUp className="text-purple-600" size={22} />
-                  <h3 className="text-xl font-bold text-gray-800">
-                    Peak Acceleration per Punch
-                  </h3>
-                </div>
-
-                <p className="mb-5 text-sm text-gray-500">
-                  Higher peak acceleration may indicate stronger punch intensity.
-                </p>
-
-                {accelerationChart.length > 0 ? (
-                  <div className="space-y-3">
-                    {accelerationChart.map((item) => {
-                      const width = `${Math.max(
-                        (item.value / maxAccelerationValue) * 100,
-                        4
-                      )}%`;
-
-                      return (
-                        <div key={item.label}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="font-semibold text-gray-600">
-                              {item.label}
-                            </span>
-                            <span className="font-bold text-purple-600">
-                              {item.value.toFixed(2)}g
-                            </span>
-                          </div>
-
-                          <div className="h-3 overflow-hidden rounded-full bg-white">
-                            <div
-                              className="h-full rounded-full bg-purple-500"
-                              style={{ width }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                    Acceleration data is not available.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {advanced?.available && (
-            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-                <h3 className="mb-2 text-xl font-bold text-gray-800">
-                  Punch Snap / Jerk
-                </h3>
-                <p className="mb-5 text-sm text-gray-500">
-                  Snap shows how quickly acceleration changes during the punch.
-                </p>
-
-                {jerkChart.length > 0 ? (
-                  <div className="space-y-3">
-                    {jerkChart.map((item) => {
-                      const width = `${Math.max(
-                        (item.value / maxJerkValue) * 100,
-                        4
-                      )}%`;
-
-                      return (
-                        <div key={item.label}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="font-semibold text-gray-600">
-                              {item.label}
-                            </span>
-                            <span className="font-bold text-purple-600">
-                              {item.value.toFixed(2)}g/s
-                            </span>
-                          </div>
-
-                          <div className="h-3 overflow-hidden rounded-full bg-white">
-                            <div
-                              className="h-full rounded-full bg-purple-400"
-                              style={{ width }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                    Snap data is not available.
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-                <h3 className="mb-2 text-xl font-bold text-gray-800">
-                  Peak Rotation
-                </h3>
-                <p className="mb-5 text-sm text-gray-500">
-                  Rotation reflects fist turnover and angular movement during
-                  extension.
-                </p>
-
-                {rotationChart.length > 0 ? (
-                  <div className="space-y-3">
-                    {rotationChart.map((item) => {
-                      const width = `${Math.max(
-                        (item.value / maxRotationValue) * 100,
-                        4
-                      )}%`;
-
-                      return (
-                        <div key={item.label}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="font-semibold text-gray-600">
-                              {item.label}
-                            </span>
-                            <span className="font-bold text-purple-600">
-                              {item.value.toFixed(1)} deg/s
-                            </span>
-                          </div>
-
-                          <div className="h-3 overflow-hidden rounded-full bg-white">
-                            <div
-                              className="h-full rounded-full bg-purple-400"
-                              style={{ width }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                    Rotation data is not available.
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-                <h3 className="mb-2 text-xl font-bold text-gray-800">
-                  15-Second Cadence Blocks
-                </h3>
-                <p className="mb-5 text-sm text-gray-500">
-                  Punch volume grouped into short time blocks.
-                </p>
-
-                {cadenceBlocks.length > 0 ? (
-                  <div className="space-y-3">
-                    {cadenceBlocks.map((item: any) => {
-                      const value = Number(item.value) || 0;
-
-                      const width = `${Math.max(
-                        (value / maxCadenceValue) * 100,
-                        4
-                      )}%`;
-
-                      return (
-                        <div key={item.label}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="font-semibold text-gray-600">
-                              {item.label}
-                            </span>
-                            <span className="font-bold text-purple-600">
-                              {value} punches
-                            </span>
-                          </div>
-
-                          <div className="h-3 overflow-hidden rounded-full bg-white">
-                            <div
-                              className="h-full rounded-full bg-purple-400"
-                              style={{ width }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                    Cadence data is not available.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-              <div className="mb-4 flex items-center gap-2">
-                <Activity className="text-purple-600" size={22} />
-                <h3 className="text-xl font-bold text-gray-800">
-                  Punch Type Distribution
-                </h3>
-              </div>
-
-              <p className="mb-5 text-sm text-gray-500">
-                Shows the detected volume for each punch type.
-              </p>
-
-              <div className="space-y-4">
-                {punchBreakdown.map((item) => {
-                  const width = `${Math.max(
-                    (Number(item.value) / maxPunchTypeValue) * 100,
-                    4
-                  )}%`;
-
-                  return (
-                    <div key={item.label}>
-                      <div className="mb-1 flex items-center justify-between text-sm">
-                        <span className="font-semibold text-gray-700">
-                          {item.label}
-                        </span>
-                        <span className="font-bold text-purple-600">
-                          {item.value}
-                        </span>
-                      </div>
-
-                      <div className="h-4 overflow-hidden rounded-full bg-white">
-                        <div
-                          className="h-full rounded-full bg-purple-500"
-                          style={{ width }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-              <div className="mb-4 flex items-center gap-2">
-                <CheckCircle className="text-purple-600" size={22} />
-                <h3 className="text-xl font-bold text-gray-800">
-                  Detection Confidence Quality
-                </h3>
-              </div>
-
-              <p className="mb-5 text-sm text-gray-500">
-                Shows how confident the model was when classifying punches.
-              </p>
-
-              {confidenceBreakdown.length > 0 ? (
-                <div className="space-y-4">
-                  {confidenceBreakdown.map((item) => {
-                    const width = `${Math.max(
-                      (Number(item.value) / maxConfidenceValue) * 100,
-                      4
-                    )}%`;
-
-                    return (
-                      <div key={item.label}>
-                        <div className="mb-1 flex items-center justify-between text-sm">
-                          <span className="font-semibold text-gray-700">
-                            {item.label}
-                          </span>
-                          <span className="font-bold text-purple-600">
-                            {item.value}
-                          </span>
-                        </div>
-
-                        <div className="h-4 overflow-hidden rounded-full bg-white">
-                          <div
-                            className="h-full rounded-full bg-purple-500"
-                            style={{ width }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                  Confidence data is not available yet.
-                </div>
-              )}
-            </div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-6">
+            {summaryCards.map((card) => (
+              <SummaryCard
+                key={card.label}
+                label={card.label}
+                value={card.value}
+                icon={card.icon}
+              />
+            ))}
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-              <div className="mb-4 flex items-center gap-2">
-                <Timer className="text-purple-600" size={22} />
-                <h3 className="text-xl font-bold text-gray-800">
-                  Combination Gap
-                </h3>
-              </div>
+            <DonutChart
+              title="Punch Type Distribution"
+              subtitle="Shows number of jabs, hooks and uppercuts."
+              totalLabel="Total"
+              totalValue={insights?.totalPunches || 0}
+              items={donutItems}
+              insight={insights?.punchMixInsight}
+            />
 
-              <p className="mb-5 text-sm text-gray-500">
-                Shows the time gap between nearby detected punches.
-              </p>
-
-              {combinationGapChart.length > 0 ? (
-                <div className="space-y-3">
-                  {combinationGapChart.map((item) => {
-                    const width = `${Math.max(
-                      (Number(item.value) / maxCombinationGap) * 100,
-                      4
-                    )}%`;
-
-                    return (
-                      <div key={item.label}>
-                        <div className="mb-1 flex items-center justify-between text-xs">
-                          <span className="font-semibold text-gray-600">
-                            {item.label}
-                          </span>
-                          <span className="font-bold text-purple-600">
-                            {item.value.toFixed(2)}s
-                          </span>
-                        </div>
-
-                        <div className="h-3 overflow-hidden rounded-full bg-white">
-                          <div
-                            className="h-full rounded-full bg-purple-400"
-                            style={{ width }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                  Combination gap data is not available yet.
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-              <div className="mb-3 flex items-center gap-2">
-                <FileText className="text-purple-600" size={22} />
-                <h3 className="text-xl font-bold text-gray-800">
-                  Coaching Recommendations
-                </h3>
-              </div>
-
-              <div className="space-y-3">
-                {(insights?.recommendations || []).map((item, index) => (
-                  <div
-                    key={`${item}-${index}`}
-                    className="rounded-xl bg-white px-4 py-3 text-gray-600"
-                  >
-                    {index + 1}. {item}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <GroupedBarChart
+              title="Forward vs Retraction Time"
+              subtitle="Shows punch delivery speed and recovery speed."
+              data={groupedTimingData}
+            />
           </div>
 
-          {advanced?.available && (
-            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <Target className="text-purple-600" size={22} />
-                  <h3 className="text-xl font-bold text-gray-800">
-                    Punch Type Averages
-                  </h3>
-                </div>
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <LineChart
+              title="Peak Acceleration Trend"
+              subtitle="Shows whether punch power increases or decreases across the session."
+              data={peakAccelerationTrend}
+              unit="g"
+            />
 
-                <p className="mb-5 text-sm text-gray-500">
-                  Average advanced metrics grouped by punch type.
-                </p>
-
-                {punchTypeAverages.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-separate border-spacing-y-2 text-left text-sm">
-                      <thead>
-                        <tr className="text-gray-500">
-                          <th className="px-4 py-2">Type</th>
-                          <th className="px-4 py-2">Count</th>
-                          <th className="px-4 py-2">Forward</th>
-                          <th className="px-4 py-2">Retraction</th>
-                          <th className="px-4 py-2">Peak Acc</th>
-                          <th className="px-4 py-2">Rotation</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {punchTypeAverages.map((item: any) => (
-                          <tr key={item.type} className="bg-white text-gray-700">
-                            <td className="rounded-l-xl px-4 py-3 font-semibold text-purple-600">
-                              {item.type}
-                            </td>
-                            <td className="px-4 py-3">{item.count}</td>
-                            <td className="px-4 py-3">
-                              {formatSeconds(item.avgForwardTime)}
-                            </td>
-                            <td className="px-4 py-3">
-                              {formatSeconds(item.avgRetractionTime)}
-                            </td>
-                            <td className="px-4 py-3">
-                              {formatNumber(item.avgPeakAcceleration, "g", 2)}
-                            </td>
-                            <td className="rounded-r-xl px-4 py-3">
-                              {formatNumber(item.avgPeakRotation, " deg/s", 1)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                    Punch type averages are not available.
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <CheckCircle className="text-purple-600" size={22} />
-                  <h3 className="text-xl font-bold text-gray-800">
-                    Advanced Coaching Insights
-                  </h3>
-                </div>
-
-                <p className="mb-5 text-sm text-gray-500">
-                  Coaching notes generated from timing, acceleration, cadence,
-                  and rotation metrics.
-                </p>
-
-                {coachingInsights.length > 0 ? (
-                  <div className="space-y-3">
-                    {coachingInsights.map((item: any, index: number) => (
-                      <div
-                        key={`${item.title}-${index}`}
-                        className="rounded-xl bg-white p-4"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="font-semibold text-gray-800">
-                            {item.title || `Insight ${index + 1}`}
-                          </p>
-                          <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
-                            {item.severity || "info"}
-                          </span>
-                        </div>
-
-                        <p className="mt-2 text-sm leading-6 text-gray-600">
-                          {item.message}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                    Advanced coaching insights are not available.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-6">
-            <div className="mb-3 flex items-center gap-2">
-              <Target className="text-purple-600" size={22} />
-              <h3 className="text-xl font-bold text-gray-800">
-                Punch Event Preview
-              </h3>
-            </div>
-
-            <p className="mb-5 text-sm text-gray-500">
-              Sample event-level output from the ML result.
-            </p>
-
-            {eventPreview.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full border-separate border-spacing-y-2 text-left text-sm">
-                  <thead>
-                    <tr className="text-gray-500">
-                      <th className="px-4 py-2">Time</th>
-                      <th className="px-4 py-2">Type</th>
-                      <th className="px-4 py-2">Start / Peak / End</th>
-                      <th className="px-4 py-2">Forward</th>
-                      <th className="px-4 py-2">Retraction</th>
-                      <th className="px-4 py-2">Peak Acc</th>
-                      <th className="px-4 py-2">Snap</th>
-                      <th className="px-4 py-2">Rotation</th>
-                      <th className="px-4 py-2">Confidence</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {eventPreview.map((event: any, index: number) => (
-                      <tr key={index} className="bg-white text-gray-700">
-                        <td className="rounded-l-xl px-4 py-3">
-                          {Number(event.t || event.time || 0).toFixed(2)}s
-                        </td>
-
-                        <td className="px-4 py-3 font-semibold text-purple-600">
-                          {event.type || "Unknown"}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {formatSeconds(event.startTime)} /{" "}
-                          {formatSeconds(event.peakTime)} /{" "}
-                          {formatSeconds(event.endTime)}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {formatSeconds(event.forwardTime)}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {formatSeconds(event.retractionTime)}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {formatNumber(event.peakAcceleration, "g", 2)}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {formatNumber(event.peakJerk, "g/s", 2)}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {formatNumber(event.peakRotation, " deg/s", 1)}
-                        </td>
-
-                        <td className="rounded-r-xl px-4 py-3">
-                          {event.confidence !== undefined
-                            ? `${(Number(event.confidence) * 100).toFixed(1)}%`
-                            : "N/A"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
-                Punch event data is not available yet.
-              </div>
-            )}
+            <SnapCards
+              title="Top 5 Sharpest Punches"
+              subtitle="Higher snap means a sharper strike."
+              events={advancedEvents}
+            />
           </div>
 
-          <div className="mt-6 rounded-2xl border border-purple-100 bg-purple-50 p-5 text-purple-700">
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <LineChart
+              title="Retraction Acceleration / Fatigue Trend"
+              subtitle="Shows whether recovery speed decreases later in the session."
+              data={retractionFatigueTrend}
+              unit="g"
+            />
+
+            <CoachingCards
+              items={
+                coachingInsights.length > 0
+                  ? coachingInsights
+                  : insights?.recommendations?.map((message) => ({
+                      title: "Coaching Note",
+                      message,
+                      severity: "info",
+                    })) || []
+              }
+            />
+          </div>
+
+          <div className="mt-6">
+            <EventSnapshotFigure
+              title="Punch Event Snapshot Figure"
+              subtitle="Explains start, peak, end, forward time and retraction time visually."
+              events={eventTableData}
+            />
+          </div>
+
+          <div className="mt-6">
+            <EventTable events={eventTableData} />
+          </div>
+
+          <div className="mt-6 rounded-3xl border border-purple-100 bg-purple-50 p-5 text-purple-700">
             <p className="font-semibold">How to use these insights</p>
             <p className="mt-1">
-              Use the video to visually check each punch, then compare it with
-              the timing, acceleration, snap, rotation, cadence, and coaching
-              cards. Fast forward time suggests quick punch delivery, while
-              controlled retraction time supports faster recovery back to guard.
+              Start with the summary cards and punch mix. Then review forward
+              time, retraction time, acceleration, snap and fatigue trends
+              together with the annotated video.
             </p>
           </div>
         </div>
