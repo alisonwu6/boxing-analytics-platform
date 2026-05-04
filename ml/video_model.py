@@ -5,7 +5,7 @@ Downloads the boxing session video and IMU CSV from S3, runs the
 Video + IMU sync framework to produce an annotated output video,
 converts it to browser-compatible H.264 MP4, then uploads the result back to S3.
 
-Returns only artifact references — all numeric punch data comes from imu_model.
+Returns only artifact references. Numeric punch data comes from imu_model.py.
 """
 
 import os
@@ -22,17 +22,18 @@ def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str)
     browser-compatible H.264 MP4, and upload it back to S3.
 
     Args:
-        bucket:     S3 bucket name
-        region:     AWS region
-        mov_key:    S3 key of the original MOV file
-        csv_key:    S3 key of the IMU CSV file
-        session_id: session identifier, used to build the output S3 key
+        bucket: S3 bucket name
+        region: AWS region
+        mov_key: S3 key of the original video file
+        csv_key: S3 key of the IMU CSV file
+        session_id: session identifier used to build the output S3 key
 
     Returns:
         dict:
             annotatedVideoKey: S3 key of the annotated output MP4
     """
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
     from video_analysis.boxing_analytics.pipeline import run_pipeline
 
     s3 = boto3.client("s3", region_name=region)
@@ -45,14 +46,15 @@ def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str)
         os.makedirs(out_dir, exist_ok=True)
 
         print(f"[VideoModel] Downloading MOV from S3: {mov_key}", file=sys.stderr)
+
         with open(video_path, "wb") as f:
             s3.download_fileobj(bucket, mov_key, f)
 
         print(f"[VideoModel] Downloading CSV from S3: {csv_key}", file=sys.stderr)
+
         with open(csv_path, "wb") as f:
             s3.download_fileobj(bucket, csv_key, f)
 
-        # Redirect stdout to stderr so pipeline progress logs do not pollute JSON stdout.
         old_stdout = sys.stdout
         sys.stdout = sys.stderr
 
@@ -74,12 +76,14 @@ def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str)
 
         browser_video_path = os.path.join(out_dir, "annotated_video_browser.mp4")
 
-        # Use FFMPEG_BIN from backend/.env if ffmpeg is not available in PATH.
         ffmpeg_bin = os.environ.get("FFMPEG_BIN", "ffmpeg")
 
         print(f"[VideoModel] Original annotated video: {annotated_path}", file=sys.stderr)
         print(f"[VideoModel] Using ffmpeg: {ffmpeg_bin}", file=sys.stderr)
-        print("[VideoModel] Converting annotated video to H.264 browser MP4...", file=sys.stderr)
+        print(
+            "[VideoModel] Converting annotated video to H.264 browser MP4...",
+            file=sys.stderr,
+        )
 
         ffmpeg_result = subprocess.run(
             [
@@ -108,7 +112,9 @@ def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str)
         if ffmpeg_result.returncode != 0:
             print("[VideoModel] ffmpeg stdout:", ffmpeg_result.stdout, file=sys.stderr)
             print("[VideoModel] ffmpeg stderr:", ffmpeg_result.stderr, file=sys.stderr)
-            raise RuntimeError("ffmpeg conversion failed. Browser video was not generated.")
+            raise RuntimeError(
+                "ffmpeg conversion failed. Browser video was not generated."
+            )
 
         if not os.path.exists(browser_video_path):
             raise FileNotFoundError(
@@ -123,6 +129,7 @@ def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str)
         output_key = f"outputs/{session_id}/annotated_video.mp4"
 
         print(f"[VideoModel] Uploading browser MP4 to S3: {output_key}", file=sys.stderr)
+
         with open(browser_video_path, "rb") as f:
             s3.upload_fileobj(
                 f,

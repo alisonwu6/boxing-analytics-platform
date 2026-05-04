@@ -1,25 +1,24 @@
 """
-Boxing session inference — entry point.
+Boxing session inference entry point.
 
-Called by the backend (ml-inference.service.js) as a subprocess:
-    python3 run_inference.py \
+Called by backend/services/ml-inference.service.js as a subprocess.
+
+Example:
+    python run_inference.py \
         --session-id <id> \
-        --bucket     <s3-bucket> \
-        --region     <aws-region> \
-        --csv-key    <s3-key> \
-        [--mov-key   <s3-key>]
+        --bucket <s3-bucket> \
+        --region <aws-region> \
+        --csv-key <s3-key> \
+        [--mov-key <s3-key>]
 
-Exit codes:
-    0  success — stdout is a single JSON object (see OUTPUT CONTRACT below)
-    1  failure — stderr message is captured as errorMessage in the DB
-
-OUTPUT CONTRACT:
+Output contract:
 {
-    "modelVersion": "1.0.0",
+    "modelVersion": "1.1.0",
     "resultSummary": [],
-    "metrics":       [],   # e.g. { "name": "totalPunches", "value": 42 }
-    "punchEvents":   [],   # e.g. { "t": 1.23, "hand": "right", "type": "jab" }
-    "artifacts":     {}
+    "metrics": [],
+    "punchEvents": [],
+    "advancedInsights": {},
+    "artifacts": {}
 }
 """
 
@@ -32,22 +31,31 @@ import video_model
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run boxing session inference from S3")
+    parser = argparse.ArgumentParser(
+        description="Run boxing session inference from S3"
+    )
+
     parser.add_argument("--session-id", required=True, help="Session identifier")
-    parser.add_argument("--bucket",     required=True, help="S3 bucket name")
-    parser.add_argument("--region",     required=True, help="AWS region")
-    parser.add_argument("--csv-key",    required=True, help="S3 key for the IMU CSV file")
-    parser.add_argument("--mov-key",    default="",    help="S3 key for the MOV video file (optional)")
+    parser.add_argument("--bucket", required=True, help="S3 bucket name")
+    parser.add_argument("--region", required=True, help="AWS region")
+    parser.add_argument("--csv-key", required=True, help="S3 key for IMU CSV file")
+    parser.add_argument(
+        "--mov-key",
+        default="",
+        help="S3 key for MOV/MP4 video file",
+    )
+
     return parser.parse_args()
 
 
 def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -> dict:
-    # IMU CSV → punch data (metrics, punchEvents) → stored in backend DB
-    result = imu_model.infer(bucket=bucket, region=region, csv_key=csv_key)
+    result = imu_model.infer(
+        bucket=bucket,
+        region=region,
+        csv_key=csv_key,
+    )
 
     if mov_key:
-        # Video + CSV → sync framework → annotated video uploaded to S3
-        # Only the artifact reference (S3 key) is added to result — no data merge
         video_artifacts = video_model.infer(
             bucket=bucket,
             region=region,
@@ -55,6 +63,8 @@ def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -
             csv_key=csv_key,
             session_id=session_id,
         )
+
+        result.setdefault("artifacts", {})
         result["artifacts"].update(video_artifacts)
 
     return result
