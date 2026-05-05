@@ -6,5 +6,5 @@ joblib
 matplotlib
 openpyxl
 boto3
-opencv-python-headless
+opencv-python
 mediapipe

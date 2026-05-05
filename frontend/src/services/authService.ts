@@ -34,8 +34,3 @@ export const authService = {
     storage.clearToken();
   },
 };
-
-export const getCurrentUser = async (): Promise<any> => {
-  const response = await apiClient.get("/auth/me");
-  return response.data;
-};
