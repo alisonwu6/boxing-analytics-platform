@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# MediaPipe model — large binary, download separately
+*.task
+
+# Analysis outputs
+*.mp4
+*.xlsx
+*.csv
+*_punches.json
+*_sync.json
+output_app/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
