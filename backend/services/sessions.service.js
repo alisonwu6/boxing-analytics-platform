@@ -222,12 +222,20 @@ async function startSessionAnalysis(id, userId) {
   const hasMov = Boolean(session.movKey || session.movFile);
 
   if (!hasCsv) {
-    throw createHttpError(400, "Session has no CSV file to infer from");
+    throw createHttpError(
+      400,
+      "CSV file is required for ML analysis. Please upload a CSV file before running analysis."
+    );
   }
 
-  if (!hasMov) {
-    throw createHttpError(400, "Session has no MOV file to generate annotated video");
-  }
+  const analysisMode = hasMov ? "full" : "csv_only";
+
+  console.log("[ANALYZE SERVICE] analysis mode:", {
+    sessionId: session.id,
+    analysisMode,
+    hasCsv,
+    hasMov,
+  });
 
   if (session.status === "processing") {
     console.log("[ANALYZE SERVICE] session is already processing:", {
@@ -240,6 +248,7 @@ async function startSessionAnalysis(id, userId) {
       sessionId: session.id,
       status: session.status,
       processingStatus: session.processingStatus,
+      analysisMode,
     };
   }
 
@@ -265,13 +274,12 @@ async function startSessionAnalysis(id, userId) {
     sessionId: saved.id,
     status: saved.status,
     processingStatus: saved.processingStatus,
+    analysisMode,
     csvKey: saved.csvKey,
     movKey: saved.movKey,
     python: process.env.PYTHON_BIN,
   });
 
-  // Start background job after response cycle.
-  // This prevents the request from waiting for the full video process.
   setImmediate(() => {
     _runInferenceBackground(saved).catch((error) => {
       console.error("[ANALYZE SERVICE] background job crashed:", {
@@ -283,10 +291,14 @@ async function startSessionAnalysis(id, userId) {
   });
 
   return {
-    message: "Session analysis started",
+    message:
+      analysisMode === "full"
+        ? "Full analysis started"
+        : "CSV insights analysis started",
     sessionId: saved.id,
     status: saved.status,
     processingStatus: saved.processingStatus,
+    analysisMode,
   };
 }
 

@@ -10,13 +10,11 @@ import {
   Home,
   PlayCircle,
   RefreshCw,
-  RotateCw,
   ShieldCheck,
   Target,
   Timer,
   TrendingUp,
   Video,
-  Waves,
   Zap,
 } from "lucide-react";
 
@@ -31,6 +29,10 @@ type Session = {
   canFetchResults?: boolean;
   csvUploadStatus?: string;
   movUploadStatus?: string;
+  csvKey?: string;
+  movKey?: string;
+  csvFile?: any;
+  movFile?: any;
   sessionDate?: string;
   sessionStartAt?: string;
   createdAt?: string;
@@ -337,7 +339,10 @@ function GroupedBarChart({
             )}%`;
 
             return (
-              <div key={item.label} className="rounded-2xl bg-white p-4 shadow-sm">
+              <div
+                key={item.label}
+                className="rounded-2xl bg-white p-4 shadow-sm"
+              >
                 <div className="mb-3 flex items-center justify-between text-sm">
                   <span className="font-semibold text-gray-700">
                     {item.label}
@@ -492,7 +497,10 @@ function EventSnapshotFigure({
           const curve = `${xStart},${yBase} ${xPeak},${yPeak} ${xEnd},${yBase}`;
 
           return (
-            <div key={`${event.eventId}-${index}`} className="rounded-2xl bg-white p-4 shadow-sm">
+            <div
+              key={`${event.eventId}-${index}`}
+              className="rounded-2xl bg-white p-4 shadow-sm"
+            >
               <div className="mb-3 flex items-center justify-between text-sm">
                 <span className="font-semibold text-purple-600">
                   #{event.eventId || index + 1} {event.type || "Punch"}
@@ -593,8 +601,7 @@ function EventSnapshotFigure({
 
       <p className="mt-4 text-xs text-gray-500">
         This figure uses start, peak and end markers returned by the backend.
-        It explains the metric concept visually; a true acceleration curve needs
-        full signal curve data from the backend.
+        A true acceleration curve needs full signal curve data from the backend.
       </p>
     </div>
   );
@@ -691,7 +698,10 @@ function EventTable({ events }: { events: any[] }) {
 
             <tbody>
               {events.slice(0, 20).map((event, index) => (
-                <tr key={`${event.eventId}-${index}`} className="bg-white text-gray-700">
+                <tr
+                  key={`${event.eventId}-${index}`}
+                  className="bg-white text-gray-700"
+                >
                   <td className="rounded-l-2xl px-4 py-3 font-semibold text-purple-600">
                     {event.type || "Unknown"}
                   </td>
@@ -770,11 +780,6 @@ export default function InsightsPage() {
     return Number.isNaN(date.getTime()) ? "N/A" : date.toLocaleString();
   };
 
-  const formatSeconds = (value: any) => {
-    const num = Number(value);
-    return Number.isFinite(num) ? `${num.toFixed(3)}s` : "N/A";
-  };
-
   const formatNumber = (value: any, suffix = "", digits = 2) => {
     const num = Number(value);
     return Number.isFinite(num) ? `${num.toFixed(digits)}${suffix}` : "N/A";
@@ -821,6 +826,10 @@ export default function InsightsPage() {
         base.movUploadStatus ||
         wrapper.movUploadStatus ||
         previousSession?.movUploadStatus,
+      csvKey: base.csvKey || wrapper.csvKey || previousSession?.csvKey,
+      movKey: base.movKey || wrapper.movKey || previousSession?.movKey,
+      csvFile: base.csvFile || wrapper.csvFile || previousSession?.csvFile,
+      movFile: base.movFile || wrapper.movFile || previousSession?.movFile,
       sessionDate:
         base.sessionDate || wrapper.sessionDate || previousSession?.sessionDate,
       sessionStartAt:
@@ -985,9 +994,14 @@ export default function InsightsPage() {
           confidenceValues.length
         : 0;
 
+    const activeCounts = counts.filter((item) => item.value > 0);
     const maxCount = Math.max(...counts.map((item) => item.value), 1);
-    const minCount = Math.min(...counts.filter((item) => item.value > 0).map((item) => item.value), maxCount);
-    const balanceRatio = minCount / maxCount;
+    const minCount =
+      activeCounts.length > 0
+        ? Math.min(...activeCounts.map((item) => item.value))
+        : 0;
+
+    const balanceRatio = maxCount > 0 ? minCount / maxCount : 0;
 
     const punchMixInsight =
       balanceRatio >= 0.7
@@ -1033,6 +1047,7 @@ export default function InsightsPage() {
 
     try {
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+        method: "GET",
         headers: { ...getAuthHeaders() },
       });
 
@@ -1058,6 +1073,7 @@ export default function InsightsPage() {
 
     try {
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/status`, {
+        method: "GET",
         headers: { ...getAuthHeaders() },
       });
 
@@ -1083,6 +1099,19 @@ export default function InsightsPage() {
 
     const currentSession = targetSession || session;
 
+    const hasMov =
+      currentSession?.movUploadStatus === "uploaded" ||
+      Boolean(currentSession?.movKey) ||
+      Boolean(currentSession?.movFile);
+
+    if (!hasMov) {
+      setVideoUrl("");
+      setVideoMessage(
+        "No MOV file was uploaded for this session. CSV insights are available, but annotated video is not available."
+      );
+      return;
+    }
+
     if (!isAnalysisFinished(currentSession)) {
       setVideoUrl("");
       setVideoMessage(
@@ -1098,6 +1127,7 @@ export default function InsightsPage() {
       const res = await fetch(
         `${API_BASE_URL}/sessions/${sessionId}/results/video`,
         {
+          method: "GET",
           headers: { ...getAuthHeaders() },
         }
       );
@@ -1106,6 +1136,14 @@ export default function InsightsPage() {
         setVideoUrl("");
         setVideoMessage(
           "Analysis completed, but no annotated video was returned for this session."
+        );
+        return;
+      }
+
+      if (res.status === 409) {
+        setVideoUrl("");
+        setVideoMessage(
+          "Video is still being prepared. Please refresh results in a moment."
         );
         return;
       }
@@ -1161,6 +1199,7 @@ export default function InsightsPage() {
       setInsightMessage("");
 
       const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/results`, {
+        method: "GET",
         headers: { ...getAuthHeaders() },
       });
 
@@ -1343,17 +1382,38 @@ export default function InsightsPage() {
     return "bg-purple-100 text-purple-700 border-purple-200";
   };
 
+  const hasCsvUploaded =
+    session?.csvUploadStatus === "uploaded" ||
+    Boolean(session?.csvKey) ||
+    Boolean(session?.csvFile);
+
+  const hasMovUploaded =
+    session?.movUploadStatus === "uploaded" ||
+    Boolean(session?.movKey) ||
+    Boolean(session?.movFile);
+
   const canRunAnalysis = useMemo(() => {
     if (!session) return false;
 
+    const hasCsv =
+      session.csvUploadStatus === "uploaded" ||
+      Boolean(session.csvKey) ||
+      Boolean(session.csvFile);
+
     return (
       session.status === "ready" &&
-      session.csvUploadStatus === "uploaded" &&
-      session.movUploadStatus === "uploaded" &&
+      hasCsv &&
       !isAnalysisRunning(session) &&
       !isAnalysisFinished(session)
     );
   }, [session]);
+
+  const analysisButtonLabel =
+    hasCsvUploaded && hasMovUploaded
+      ? "Run Full Analysis"
+      : hasCsvUploaded
+      ? "Run CSV Insights"
+      : "CSV Required";
 
   const advanced = insights?.advancedInsights;
   const advancedEvents = Array.isArray(advanced?.eventMetrics)
@@ -1428,8 +1488,10 @@ export default function InsightsPage() {
       }));
     }
 
-    const grouped: Record<string, { count: number; forward: number; retraction: number }> =
-      {};
+    const grouped: Record<
+      string,
+      { count: number; forward: number; retraction: number }
+    > = {};
 
     advancedEvents.forEach((event: any) => {
       const type = event.type || "Unknown";
@@ -1577,7 +1639,7 @@ export default function InsightsPage() {
                 ) : (
                   <>
                     <PlayCircle size={18} />
-                    Run Analysis
+                    {analysisButtonLabel}
                   </>
                 )}
               </button>
@@ -1614,11 +1676,11 @@ export default function InsightsPage() {
               <div className="max-w-md text-center">
                 <Video className="mx-auto mb-4 text-gray-400" size={48} />
                 <p className="text-lg font-semibold text-gray-700">
-                  Annotated video not available yet
+                  Annotated video not available
                 </p>
                 <p className="mt-2 text-gray-500">
                   {videoMessage ||
-                    "The annotated video will appear after processing is completed."}
+                    "Upload CSV + MOV and run full analysis to generate annotated video."}
                 </p>
               </div>
             </div>
@@ -1733,9 +1795,10 @@ export default function InsightsPage() {
           <div className="mt-6 rounded-3xl border border-purple-100 bg-purple-50 p-5 text-purple-700">
             <p className="font-semibold">How to use these insights</p>
             <p className="mt-1">
-              Start with the summary cards and punch mix. Then review forward
-              time, retraction time, acceleration, snap and fatigue trends
-              together with the annotated video.
+              CSV-only sessions can show punch metrics and advanced insights.
+              CSV + MOV sessions can also show annotated video. Use the charts
+              with the video to review punch speed, recovery, power, snap and
+              fatigue.
             </p>
           </div>
         </div>
