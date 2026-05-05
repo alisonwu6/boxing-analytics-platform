@@ -1,5 +1,6 @@
 const path = require("path");
 const dotenv = require("dotenv");
+const { getDatabaseConfig, getDatabaseEnvStatus } = require("./db/config");
 
 // Always load backend/.env first, before importing app/routes/services
 const envPath = path.resolve(__dirname, ".env");
@@ -25,13 +26,8 @@ console.log("[ENV CHECK]", {
   hasAwsKey: Boolean(process.env.AWS_ACCESS_KEY_ID),
   hasAwsSecret: Boolean(process.env.AWS_SECRET_ACCESS_KEY),
   hasAwsSessionToken: Boolean(process.env.AWS_SESSION_TOKEN),
-  hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
-  pgHost: process.env.PGHOST,
-  pgPort: process.env.PGPORT,
-  pgDatabase: process.env.PGDATABASE,
-  pgUser: process.env.PGUSER,
-  hasPgPassword: Boolean(process.env.PGPASSWORD),
   hasJwtSecret: Boolean(process.env.JWT_SECRET),
+  ...getDatabaseEnvStatus(),
 });
 
 // Import app only after .env is loaded
@@ -49,17 +45,9 @@ const PORT = Number(process.env.PORT) || 3001;
 
 async function testDatabaseConnection() {
   try {
-    // Prefer pg because your .env uses PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD
     const { Pool } = require("pg");
 
-    const pool = new Pool({
-      host: process.env.PGHOST || "127.0.0.1",
-      port: Number(process.env.PGPORT) || 5432,
-      database: process.env.PGDATABASE,
-      user: process.env.PGUSER,
-      password: process.env.PGPASSWORD,
-      connectionString: process.env.DATABASE_URL || undefined,
-    });
+    const pool = new Pool(getDatabaseConfig());
 
     const result = await pool.query("SELECT NOW()");
     console.log("DB connected:", result.rows[0]);
