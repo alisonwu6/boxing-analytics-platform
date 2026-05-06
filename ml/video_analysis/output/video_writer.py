@@ -2,8 +2,8 @@ import numpy as np
 import cv2
 from pathlib import Path
 
-from core.landmarks import DRAW_JOINTS, SKEL, L_HIGHLIGHT, R_HIGHLIGHT
-from core.jab_detect import EA_LOAD_MAX, EA_DRIVE_MIN, MIN_SPEED
+from ml.video_analysis.core.landmarks import DRAW_JOINTS, SKEL, L_HIGHLIGHT, R_HIGHLIGHT
+from ml.video_analysis.core.jab_detect import EA_LOAD_MAX, EA_DRIVE_MIN, MIN_SPEED
 
 _LW, _RW = 9, 10
 CL = (80, 185, 63)
