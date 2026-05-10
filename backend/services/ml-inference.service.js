@@ -221,8 +221,8 @@ async function runSessionInference(session, analysisOptions = {}) {
     analysisOptions,
   });
 
-  if (!session.csvKey && !session.movKey) {
-    throw createHttpError(400, "Session has no CSV or MOV file to infer from");
+  if (!session.csvKey) {
+    throw createHttpError(400, "Session has no CSV file to infer from");
   }
 
   const scriptPath = resolveInferenceScriptPath();
@@ -251,11 +251,9 @@ async function runSessionInference(session, analysisOptions = {}) {
     getS3Bucket(),
     "--region",
     getAwsRegion(),
+    "--csv-key",
+    session.csvKey,
   ];
-
-  if (session.csvKey) {
-    args.push("--csv-key", session.csvKey);
-  }
 
   if (session.movKey) {
     args.push("--mov-key", session.movKey);
@@ -304,7 +302,6 @@ async function runSessionInference(session, analysisOptions = {}) {
 
   console.log("[ML SERVICE] about to run inference:", {
     scriptPath,
-    hasCsv: Boolean(session.csvKey),
     hasMov: Boolean(session.movKey),
     analysisOptions,
   });
