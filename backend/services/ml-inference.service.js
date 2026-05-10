@@ -297,6 +297,10 @@ async function runSessionInference(session, videoOptions = {}) {
       String(videoOptions.jumpWindowEnd)
     );
   }
+  
+  console.log("[ML SERVICE] video options:", videoOptions);
+  console.log("[ML SERVICE] final python args:", args.join(" "));
+
   const { stdout } = await runPythonProcess(resolvePythonBin(), args, {
     cwd: getProjectRoot(),
   });
