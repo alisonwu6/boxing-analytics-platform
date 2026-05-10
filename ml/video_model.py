@@ -1,6 +1,7 @@
 """
 Video / MOV inference module.
 
+<<<<<<< HEAD
 This connects the existing backend S3 workflow to the standalone
 video_analysis/analyse.py CLI.
 
@@ -23,6 +24,13 @@ Flow:
 3. Run the standalone Python video analysis command.
 4. Convert the annotated MP4 to browser-friendly H.264 if ffmpeg is available.
 5. Upload generated artifacts back to S3.
+=======
+Downloads the boxing session video and IMU CSV from S3, runs the
+Video + IMU sync framework to produce an annotated output video,
+converts it to browser-compatible H.264 MP4, then uploads the result back to S3.
+
+Returns only artifact references. Numeric punch data comes from imu_model.py.
+>>>>>>> parent of a2d533c (update)
 """
 
 import os
@@ -33,15 +41,19 @@ import subprocess
 import boto3
 
 
-_CONTENT_TYPES = {
-    "annotatedVideoKey": "video/mp4",
-    "videoPunchJsonKey": "application/json",
-    "videoReportExcelKey": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "videoTrackingCsvKey": "text/csv",
-    "videoSyncJsonKey": "application/json",
-}
+def infer(bucket: str, region: str, mov_key: str, csv_key: str, session_id: str) -> dict:
+    """
+    Download MOV + CSV from S3, produce an annotated video, convert it to
+    browser-compatible H.264 MP4, and upload it back to S3.
 
+    Args:
+        bucket: S3 bucket name
+        region: AWS region
+        mov_key: S3 key of the original video file
+        csv_key: S3 key of the IMU CSV file
+        session_id: session identifier used to build the output S3 key
 
+<<<<<<< HEAD
 def _project_root() -> Path:
     """Find the repository root robustly from ml/video_model.py."""
     current = Path(__file__).resolve()
@@ -55,8 +67,17 @@ def _project_root() -> Path:
         return current.parent.parent
 
     return current.parents[1]
+=======
+    Returns:
+        dict:
+            annotatedVideoKey: S3 key of the annotated output MP4
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+>>>>>>> parent of a2d533c (update)
 
+    from video_analysis.boxing_analytics.pipeline import run_pipeline
 
+<<<<<<< HEAD
 def _video_analysis_dir() -> Path:
     """Locate the standalone video_analysis folder. It must contain analyse.py."""
     project_root = _project_root()
@@ -80,36 +101,44 @@ def _video_analysis_dir() -> Path:
 
     checked = "\n".join(str(path) for path in candidates)
     raise FileNotFoundError("Video analysis directory not found. Checked:\n" + checked)
+=======
+    s3 = boto3.client("s3", region_name=region)
+>>>>>>> parent of a2d533c (update)
 
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        video_path = os.path.join(tmp_dir, "input.mov")
+        csv_path = os.path.join(tmp_dir, "imu.csv")
+        out_dir = os.path.join(tmp_dir, "output")
 
-def _analyse_script() -> Path:
-    return _video_analysis_dir() / "analyse.py"
+        os.makedirs(out_dir, exist_ok=True)
 
+        print(f"[VideoModel] Downloading MOV from S3: {mov_key}", file=sys.stderr)
 
-def _download_s3_file(s3, bucket: str, key: str, local_path: Path) -> None:
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[VideoModel] Downloading s3://{bucket}/{key} -> {local_path}", file=sys.stderr)
-    s3.download_file(bucket, key, str(local_path))
+        with open(video_path, "wb") as f:
+            s3.download_fileobj(bucket, mov_key, f)
 
+        print(f"[VideoModel] Downloading CSV from S3: {csv_key}", file=sys.stderr)
 
-def _upload_s3_file(s3, bucket: str, local_path: Path, key: str, content_type: str) -> None:
-    print(f"[VideoModel] Uploading {local_path} -> s3://{bucket}/{key}", file=sys.stderr)
-    s3.upload_file(
-        str(local_path),
-        bucket,
-        key,
-        ExtraArgs={
-            "ContentType": content_type,
-            "ContentDisposition": "inline" if content_type.startswith("video/") else "attachment",
-        },
-    )
+        with open(csv_path, "wb") as f:
+            s3.download_fileobj(bucket, csv_key, f)
 
+        old_stdout = sys.stdout
+        sys.stdout = sys.stderr
 
-def _input_suffix(s3_key: str, fallback: str) -> str:
-    suffix = Path(s3_key).suffix.lower()
-    return suffix if suffix else fallback
+        try:
+            run_pipeline(
+                video_path=video_path,
+                imu_r_path=csv_path,
+                imu_l_path=None,
+                out_dir=out_dir,
+                write_video=True,
+            )
+        finally:
+            sys.stdout = old_stdout
 
+        annotated_path = os.path.join(out_dir, "input_annotated.mp4")
 
+<<<<<<< HEAD
 def _build_child_env() -> dict:
     """
     Build environment for analyse.py.
@@ -389,11 +418,87 @@ def infer(
             artifacts[artifact_name] = s3_key
 
         video_punch_events = _read_video_punch_events(expected_outputs["videoPunchJsonKey"])
+=======
+        if not os.path.exists(annotated_path):
+            raise FileNotFoundError(f"Annotated video not found: {annotated_path}")
+
+        browser_video_path = os.path.join(out_dir, "annotated_video_browser.mp4")
+
+        ffmpeg_bin = os.environ.get("FFMPEG_BIN", "ffmpeg")
+
+        print(f"[VideoModel] Original annotated video: {annotated_path}", file=sys.stderr)
+        print(f"[VideoModel] Using ffmpeg: {ffmpeg_bin}", file=sys.stderr)
+        print(
+            "[VideoModel] Converting annotated video to H.264 browser MP4...",
+            file=sys.stderr,
+        )
+
+        ffmpeg_result = subprocess.run(
+            [
+                ffmpeg_bin,
+                "-y",
+                "-i",
+                annotated_path,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-an",
+                browser_video_path,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        if ffmpeg_result.returncode != 0:
+            print("[VideoModel] ffmpeg stdout:", ffmpeg_result.stdout, file=sys.stderr)
+            print("[VideoModel] ffmpeg stderr:", ffmpeg_result.stderr, file=sys.stderr)
+            raise RuntimeError(
+                "ffmpeg conversion failed. Browser video was not generated."
+            )
+
+        if not os.path.exists(browser_video_path):
+            raise FileNotFoundError(
+                f"Browser-compatible video not found: {browser_video_path}"
+            )
+
+        print(
+            "[VideoModel] Converted annotated video to browser-compatible H.264 MP4",
+            file=sys.stderr,
+        )
+>>>>>>> parent of a2d533c (update)
+
+        output_key = f"outputs/{session_id}/annotated_video.mp4"
+
+        print(f"[VideoModel] Uploading browser MP4 to S3: {output_key}", file=sys.stderr)
+
+        with open(browser_video_path, "rb") as f:
+            s3.upload_fileobj(
+                f,
+                bucket,
+                output_key,
+                ExtraArgs={
+                    "ContentType": "video/mp4",
+                    "ContentDisposition": "inline",
+                },
+            )
 
     return {
+<<<<<<< HEAD
         "artifacts": artifacts,
         "videoPunchEvents": video_punch_events,
         "resultSummary": [
             f"Video analysis completed with {len(video_punch_events)} video-detected punches."
         ],
     }
+=======
+        "annotatedVideoKey": output_key,
+    }
+>>>>>>> parent of a2d533c (update)

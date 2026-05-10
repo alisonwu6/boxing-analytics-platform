@@ -438,6 +438,17 @@ async function _runInferenceBackground(session, analysisOptions = {}) {
 
     const { payload } = await runSessionInference(runningSession, analysisOptions);
 
+
+    console.log("[ANALYZE JOB] runSessionInference returned:", {
+      sessionId: session.id,
+      modelVersion: payload?.modelVersion,
+      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
+      punchEventsCount: Array.isArray(payload?.punchEvents)
+        ? payload.punchEvents.length
+        : 0,
+      artifacts: payload?.artifacts,
+    });
+
     const finishedAt = new Date().toISOString();
 
     const latestSession =
