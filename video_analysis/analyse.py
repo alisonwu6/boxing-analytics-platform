@@ -31,12 +31,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ml.video_analysis.core.landmarks import extract_landmarks
-from ml.video_analysis.core.signals   import smooth_joints, interp_joints, compute_signals, hip_y_signal
-from ml.video_analysis.core.jab_detect import detect_jabs, apply_shoulder_zone_filter
-from ml.video_analysis.output.video_writer import render
-from ml.video_analysis.output.excel        import export_excel
-from ml.video_analysis.output.csv_export   import save_tracking_csv
+from core.landmarks import extract_landmarks
+from core.signals   import smooth_joints, interp_joints, compute_signals, hip_y_signal
+from core.jab_detect import detect_jabs, apply_shoulder_zone_filter
+from output.video_writer import render
+from output.excel        import export_excel
+from output.csv_export   import save_tracking_csv
 
 
 def _progress(pct, msg):
@@ -182,7 +182,7 @@ def main():
     # sync computation
     sync_result = None
     if args.sync:
-        from ml.video_analysis.core.sync import compute_sync, SyncResult
+        from core.sync import compute_sync, SyncResult
         _progress(73, "Computing sync offsets…")
 
         if args.sync_auto:
@@ -197,7 +197,7 @@ def main():
         else:
             off_r = args.offset_r or 0.0
             off_l = args.offset_l or 0.0
-            from ml.video_analysis.core.sync import SyncResult
+            from core.sync import SyncResult
             sync_result = SyncResult(
                 offset_R=off_r,
                 offset_L=off_l,

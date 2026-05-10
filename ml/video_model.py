@@ -214,6 +214,7 @@ def _convert_to_browser_mp4(input_path: Path, output_path: Path) -> Path:
 
 def _read_video_punch_events(punch_json_path: Path) -> list:
     if not punch_json_path.exists():
+        print(f"[VideoModel] Punch JSON not found: {punch_json_path}", file=sys.stderr)
         return []
 
     try:
@@ -222,23 +223,49 @@ def _read_video_punch_events(punch_json_path: Path) -> list:
         print(f"[VideoModel] Could not read punch JSON: {exc}", file=sys.stderr)
         return []
 
+    punches = data.get("punches", [])
+
     events = []
 
-    for item in data.get("punches", []):
+    for item in punches:
         events.append(
             {
                 "eventId": item.get("id"),
+                "id": item.get("id"),
+
+                # main matching time
                 "t": item.get("time_s"),
-                "hand": item.get("hand"),
-                "type": item.get("type", "jab"),
+                "time": item.get("time_s"),
+
+                # video range
                 "startTime": item.get("start_t_s"),
                 "endTime": item.get("end_t_s"),
+                "start_t_s": item.get("start_t_s"),
+                "end_t_s": item.get("end_t_s"),
+
+                # punch info
+                "hand": item.get("hand"),
+                "type": item.get("type", "jab"),
+
+                # metrics
                 "forwardTimeMs": item.get("fwd_ms"),
                 "retractionTimeMs": item.get("ret_ms"),
+                "fwd_ms": item.get("fwd_ms"),
+                "ret_ms": item.get("ret_ms"),
                 "speedPx": item.get("speed_px"),
+                "speed_px": item.get("speed_px"),
+                "elbowLoad": item.get("ea_load"),
+                "elbowDrive": item.get("ea_drive"),
+                "shoulderWristGain": item.get("dsw_gain"),
+
+                # frame info
+                "peakFrame": item.get("peak_fi"),
+                "startFrame": item.get("start_fi"),
+                "endFrame": item.get("end_fi"),
             }
         )
 
+    print(f"[VideoModel] Loaded {len(events)} video punch events", file=sys.stderr)
     return events
 
 

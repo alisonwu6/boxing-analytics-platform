@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./video_analysis/boxing_analytics"
+    ]
+}
