@@ -45,15 +45,11 @@ def _progress(pct, msg):
 
 def _load_imu(path, label):
     try:
-        from core.imu import IMUProcessor
+        from boxing_analytics.core.imu import IMUProcessor
     except ImportError:
-        sys.exit(
-            "IMU analysis is not available because core/imu.py was not found. "
-            "Disable --imu-analysis and --sync, or add core/imu.py to video_analysis/core."
-        )
-
+        sys.exit("boxing_analytics package not found — make sure it's in the Python path")
     proc = IMUProcessor()
-    imu = proc.load(path, label=label)
+    imu  = proc.load(path, label=label)
     return imu
 
 

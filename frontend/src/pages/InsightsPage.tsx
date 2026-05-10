@@ -41,6 +41,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
 type Session = {
+type Session = {
   id: string;
   title?: string;
   status?: string;
@@ -332,169 +333,94 @@ function GroupedBarChart({
   );
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-sky-600 p-6 text-white">
-        <button
-          onClick={onBack}
-          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-white/80 transition hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </button>
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+      {subtitle && <p className="mt-2 text-sm text-gray-500">{subtitle}</p>}
 
-        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">
-              {session?.title || "Session Insights"}
-            </h1>
+      {topEvents.length > 0 ? (
+        <div className="mt-5 space-y-3">
+          {topEvents.map((event, index) => (
+            <div
+              key={`${event.eventId}-${index}`}
+              className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm"
+            >
+              <div>
+                <p className="font-semibold text-gray-800">
+                  #{event.eventId || index + 1} {event.type || "Punch"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Higher snap means a sharper strike.
+                </p>
+              </div>
 
-            <p className="mt-2 max-w-2xl text-sm text-purple-100">
-              Review CSV/ML analysis and video analysis separately using the
-              switcher below.
-            </p>
-
-            <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium">
-              <StatusPill
-                label="CSV"
-                value={hasCsv ? "Uploaded" : "Missing"}
-                active={hasCsv}
-                light
-              />
-              <StatusPill
-                label="Video"
-                value={hasMov ? "Uploaded" : "Missing"}
-                active={hasMov}
-                light
-              />
-              <StatusPill
-                label="Status"
-                value={session?.processingStatus || session?.status || "Idle"}
-                active={
-                  session?.status === "completed" ||
-                  session?.processingStatus === "completed"
-                }
-                light
-              />
+              <div className="text-right">
+                <p className="text-xl font-bold text-purple-600">
+                  {Number(event.peakJerk).toFixed(2)}
+                </p>
+                <p className="text-xs text-gray-500">g/s</p>
+              </div>
             </div>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              onClick={onRefresh}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/15 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/25"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </button>
-
-            <button
-              onClick={onAnalyze}
-              disabled={analyzing || (!hasCsv && !hasMov)}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-purple-700 transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:bg-white/40 disabled:text-white/70"
-            >
-              {analyzing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Run Analysis
-                </>
-              )}
-            </button>
-          </div>
+          ))}
         </div>
-      </div>
+      ) : (
+        <div className="mt-5 rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Punch snap data is not available.
+        </div>
+      )}
     </div>
   );
 }
 
-function InsightViewSwitcher({
-  activeView,
-  onChange,
+function CoachingCards({
+  items,
 }: {
-  activeView: InsightView;
-  onChange: (view: InsightView) => void;
+  items: { title?: string; message?: string; severity?: string }[];
 }) {
-  const views = [
-    {
-      key: "ml" as const,
-      label: "ML / CSV Analysis",
-      description: "Sensor-based punch charts and metrics",
-      icon: Activity,
-    },
-    {
-      key: "video" as const,
-      label: "Video Analysis",
-      description: "Annotated movement review with punch matching",
-      icon: Video,
-    },
-  ];
+  const getClass = (severity?: string) => {
+    if (severity === "positive") {
+      return "border-green-100 bg-green-50 text-green-800";
+    }
 
-  const activeIndex = views.findIndex((view) => view.key === activeView);
-  const activeItem = views[activeIndex];
-  const ActiveIcon = activeItem.icon;
+    if (severity === "warning") {
+      return "border-yellow-100 bg-yellow-50 text-yellow-800";
+    }
 
-  function goPrevious() {
-    const previousIndex = activeIndex === 0 ? views.length - 1 : activeIndex - 1;
-    onChange(views[previousIndex].key);
-  }
-
-  function goNext() {
-    const nextIndex = activeIndex === views.length - 1 ? 0 : activeIndex + 1;
-    onChange(views[nextIndex].key);
-  }
+    return "border-purple-100 bg-purple-50 text-purple-800";
+  };
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
-      <div className="flex items-center justify-center gap-8">
-        <button
-          onClick={goPrevious}
-          className="rounded-full p-3 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
-          aria-label="Previous view"
-        >
-          <ChevronLeft className="h-8 w-8" />
-        </button>
-
-        <div className="flex min-w-[280px] flex-col items-center text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-purple-50 text-purple-600">
-            <ActiveIcon className="h-11 w-11" />
-          </div>
-
-          <h2 className="mt-4 text-xl font-bold text-slate-900">
-            {activeItem.label}
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            {activeItem.description}
-          </p>
-
-          <div className="mt-4 flex gap-2">
-            {views.map((view) => (
-              <button
-                key={view.key}
-                onClick={() => onChange(view.key)}
-                className={`h-2.5 w-2.5 rounded-full transition ${
-                  activeView === view.key
-                    ? "bg-purple-600"
-                    : "bg-slate-300 hover:bg-slate-400"
-                }`}
-                aria-label={`Switch to ${view.label}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        <button
-          onClick={goNext}
-          className="rounded-full p-3 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
-          aria-label="Next view"
-        >
-          <ChevronRight className="h-8 w-8" />
-        </button>
+    <div className="rounded-3xl border border-gray-100 bg-gray-50 p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <CheckCircle className="text-purple-600" size={22} />
+        <h3 className="text-xl font-bold text-gray-800">Coaching Insights</h3>
       </div>
+
+      {items.length > 0 ? (
+        <div className="space-y-3">
+          {items.map((item, index) => (
+            <div
+              key={`${item.title}-${index}`}
+              className={`rounded-2xl border p-4 ${getClass(item.severity)}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold">
+                  {item.title || `Insight ${index + 1}`}
+                </p>
+                <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-semibold">
+                  {item.severity || "info"}
+                </span>
+              </div>
+              <p className="mt-2 text-sm leading-6">
+                {item.message || "No message available."}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Coaching insights are not available.
+        </div>
+      )}
     </div>
   );
 }
@@ -910,260 +836,620 @@ export default function InsightsPage() {
   function handleTimeUpdate() {
     if (!videoRef.current) return;
 
-    const time = videoRef.current.currentTime;
-    setCurrentTime(time);
+    const toNumber = (value: any) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
 
-    const activeIndex = getActivePunchIndex(videoPunchEvents, time);
-
-    if (activeIndex !== null) {
-      setSelectedPunchIndex(null);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="rounded-3xl bg-gradient-to-r from-slate-900 to-purple-900 p-6 text-white">
-        <h2 className="text-2xl font-bold">Video Analysis</h2>
-        <p className="mt-2 max-w-3xl text-sm text-slate-200">
-          Watch the annotated video and match each detected punch with its
-          timing, hand, type, and movement metrics.
-        </p>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
-        <div className="space-y-4">
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-black shadow-sm">
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              controls
-              onTimeUpdate={handleTimeUpdate}
-              className="h-auto w-full"
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard title="Video Result" value="Available" />
-            <SummaryCard
-              title="Current Time"
-              value={`${currentTime.toFixed(2)}s`}
-            />
-            <SummaryCard
-              title="Detected Punches"
-              value={videoPunchEvents.length}
-            />
-            <SummaryCard
-              title="URL Expiry"
-              value={
-                videoResult?.expiresIn ? `${videoResult.expiresIn}s` : "N/A"
-              }
-            />
-          </div>
-
-          {activePunch && (
-            <div className="rounded-3xl border border-purple-200 bg-purple-50 p-5">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-600 text-lg font-bold text-white">
-                  #{displayActiveIndex !== null ? displayActiveIndex + 1 : "-"}
-                </div>
-
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-purple-950">
-                    Current Matched Punch
-                  </h3>
-
-                  <p className="mt-1 text-sm text-purple-700">
-                    {getPunchType(activePunch)} ·{" "}
-                    {formatValue(
-                      activePunch.hand ||
-                        activePunch.punchHand ||
-                        activePunch.punch_hand ||
-                        activePunch.side
-                    )}{" "}
-                    hand · Time {formatValue(getVideoEventSeekTime(activePunch))}
-                    s
-                  </p>
-
-                  <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
-                    <div className="rounded-2xl bg-white p-3">
-                      <p className="text-purple-500">Forward Time</p>
-                      <p className="font-bold text-purple-950">
-                        {formatValue(getForwardTime(activePunch))}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-white p-3">
-                      <p className="text-purple-500">Retraction Time</p>
-                      <p className="font-bold text-purple-950">
-                        {formatValue(getRetractionTime(activePunch))}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-white p-3">
-                      <p className="text-purple-500">Speed</p>
-                      <p className="font-bold text-purple-950">
-                        {formatValue(
-                          activePunch.speedPx ||
-                            activePunch.speed_px ||
-                            activePunch.speed
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <VideoPunchTimeline
-          events={videoPunchEvents}
-          currentTime={currentTime}
-          activeIndex={displayActiveIndex}
-          onPunchClick={handlePunchClick}
-        />
-      </div>
-    </div>
-  );
-}
-
-function VideoPunchTimeline({
-  events,
-  currentTime,
-  activeIndex,
-  onPunchClick,
-}: {
-  events: Record<string, unknown>[];
-  currentTime: number;
-  activeIndex: number | null;
-  onPunchClick: (index: number) => void;
-}) {
-  if (!events.length) {
-    return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900">Punch Matching</h3>
-        <p className="mt-2 text-sm text-slate-500">
-          No video punch events were returned. The video can still be watched,
-          but punch-by-punch matching needs videoPunchEvents from the backend.
-        </p>
-      </div>
+    const jabCount = toNumber(
+      getMetricAny(["count_Jab", "count_jab", "jabCount"])
     );
-  }
+    const hookCount = toNumber(
+      getMetricAny(["count_Hook", "count_hook", "hookCount"])
+    );
+    const uppercutCount = toNumber(
+      getMetricAny(["count_Uppercut", "count_uppercut", "uppercutCount"])
+    );
 
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4">
-        <h3 className="text-lg font-bold text-slate-900">Punch Matching</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Click a punch to jump to that moment in the video. The active punch
-          changes as the video plays.
-        </p>
-      </div>
+    const counts = [
+      { type: "Jab", value: jabCount },
+      { type: "Hook", value: hookCount },
+      { type: "Uppercut", value: uppercutCount },
+    ];
 
-      <div className="mb-4 rounded-2xl bg-slate-50 p-4">
-        <p className="text-sm text-slate-500">Video Time</p>
-        <p className="mt-1 text-2xl font-bold text-slate-900">
-          {currentTime.toFixed(2)}s
-        </p>
-      </div>
+    const dominant = [...counts].sort((a, b) => b.value - a.value)[0];
 
-      <div className="max-h-[680px] space-y-3 overflow-y-auto pr-2">
-        {events.map((event, index) => {
-          const isActive = activeIndex === index;
-          const time = getVideoEventSeekTime(event);
-          const startTime = getVideoEventStartTime(event);
-          const endTime = getVideoEventEndTime(event);
+    const totalPunches =
+      source.totalPunches ||
+      source.total_punches ||
+      getMetric("totalPunches");
 
-          return (
-            <button
-              key={index}
-              onClick={() => onPunchClick(index)}
-              className={`w-full rounded-2xl border p-4 text-left transition ${
-                isActive
-                  ? "border-purple-500 bg-purple-50 shadow-sm"
-                  : "border-slate-200 bg-white hover:border-purple-200 hover:bg-slate-50"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-xl text-sm font-bold ${
-                      isActive
-                        ? "bg-purple-600 text-white"
-                        : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
+    const punchesPerMinute =
+      source.punchesPerMinute ||
+      source.punches_per_minute ||
+      getMetric("punchesPerMinute");
 
-                  <div>
-                    <p className="font-bold text-slate-900">
-                      {getPunchType(event)}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {formatValue(
-                        event.hand ||
-                          event.punchHand ||
-                          event.punch_hand ||
-                          event.side
-                      )}{" "}
-                      hand
-                    </p>
-                  </div>
-                </div>
+    const sessionDurationSecs =
+      source.sessionDurationSecs ||
+      source.session_duration_secs ||
+      getMetric("sessionDurationSecs");
 
-                <div className="text-right">
-                  <p className="text-sm font-bold text-slate-900">
-                    {time === null ? "N/A" : `${time.toFixed(2)}s`}
-                  </p>
-                  <p className="text-xs text-slate-500">jump to time</p>
-                </div>
-              </div>
+    const sortedEvents = [...rawPunchEvents]
+      .map((event: any, index: number) => {
+        const eventId = Number(event.eventId || index + 1);
+        const advanced = advancedByEventId.get(eventId) || {};
 
-              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">Start</p>
-                  <p className="font-semibold text-slate-700">
-                    {startTime === null ? "N/A" : `${startTime.toFixed(2)}s`}
-                  </p>
-                </div>
+        return {
+          ...event,
+          eventId,
+          startTime: event.startTime ?? advanced.startTime,
+          peakTime: event.peakTime ?? advanced.peakTime,
+          endTime: event.endTime ?? advanced.endTime,
+          forwardTime: event.forwardTime ?? advanced.forwardTime,
+          retractionTime: event.retractionTime ?? advanced.retractionTime,
+          peakAcceleration:
+            event.peakAcceleration ?? advanced.peakAcceleration,
+          peakJerk: event.peakJerk ?? advanced.peakJerk,
+          avgRetractionAcceleration:
+            event.avgRetractionAcceleration ??
+            advanced.avgRetractionAcceleration,
+          peakRotation: event.peakRotation ?? advanced.peakRotation,
+        };
+      })
+      .sort((a, b) => {
+        const timeA = Number(a.t || a.time || a.timestamp || 0);
+        const timeB = Number(b.t || b.time || b.timestamp || 0);
+        return timeA - timeB;
+      });
 
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">End</p>
-                  <p className="font-semibold text-slate-700">
-                    {endTime === null ? "N/A" : `${endTime.toFixed(2)}s`}
-                  </p>
-                </div>
+    const confidenceValues = sortedEvents
+      .map((event: any) => Number(event.confidence))
+      .filter((value) => Number.isFinite(value));
 
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">Forward</p>
-                  <p className="font-semibold text-slate-700">
-                    {formatValue(getForwardTime(event))}
-                  </p>
-                </div>
+    const avgConfidenceNumber =
+      confidenceValues.length > 0
+        ? confidenceValues.reduce((sum, value) => sum + value, 0) /
+          confidenceValues.length
+        : 0;
 
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">Retraction</p>
-                  <p className="font-semibold text-slate-700">
-                    {formatValue(getRetractionTime(event))}
-                  </p>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+    const activeCounts = counts.filter((item) => item.value > 0);
+    const maxCount = Math.max(...counts.map((item) => item.value), 1);
+    const minCount =
+      activeCounts.length > 0
+        ? Math.min(...activeCounts.map((item) => item.value))
+        : 0;
 
-function SummaryCard({
-  title,
-  value,
-}: {
-  title: string;
-  value: string | number;
-}) {
+    const balanceRatio = maxCount > 0 ? minCount / maxCount : 0;
+
+    const punchMixInsight =
+      balanceRatio >= 0.7
+        ? "The punch mix was balanced."
+        : `${dominant.type} was the dominant punch type in this session.`;
+
+    return {
+      totalPunches,
+      punchRate:
+        punchesPerMinute !== "N/A"
+          ? `${Number(punchesPerMinute).toFixed(2)} punches/min`
+          : "N/A",
+      sessionDuration:
+        sessionDurationSecs !== "N/A"
+          ? `${Number(sessionDurationSecs).toFixed(1)} sec`
+          : "N/A",
+      dominantPunch: dominant?.type || "N/A",
+      avgConfidence:
+        confidenceValues.length > 0
+          ? `${(avgConfidenceNumber * 100).toFixed(1)}%`
+          : "N/A",
+      avgPeakAcceleration: formatNumber(
+        advancedInsights?.summary?.averagePeakAcceleration,
+        "g",
+        2
+      ),
+      punchMixInsight,
+      jabCount,
+      hookCount,
+      uppercutCount,
+      recommendations: [
+        punchMixInsight,
+        "Use the video together with the timing and acceleration charts to review punch quality.",
+        "Higher snap means a sharper strike, while slower retraction may indicate delayed recovery back to guard.",
+      ],
+      punchEvents: sortedEvents,
+      advancedInsights,
+    };
+  };
+
+  const loadSessionDetail = async () => {
+    if (!sessionId) return null;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
+        method: "GET",
+        headers: { ...getAuthHeaders() },
+      });
+
+      if (res.status === 401) {
+        setError("Unauthorized. Please login again.");
+        return null;
+      }
+
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      const sessionData = normaliseSessionResponse(data, session);
+      setSession(sessionData);
+      return sessionData;
+    } catch (err) {
+      console.warn("Could not load session detail:", err);
+      return null;
+    }
+  };
+
+  const loadSessionStatus = async (previous?: Session | null) => {
+    if (!sessionId) return null;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/status`, {
+        method: "GET",
+        headers: { ...getAuthHeaders() },
+      });
+
+      if (res.status === 401) {
+        setError("Unauthorized. Please login again.");
+        return previous || null;
+      }
+
+      if (!res.ok) return previous || null;
+
+      const data = await res.json();
+      const sessionData = normaliseSessionResponse(data, previous || session);
+      setSession(sessionData);
+      return sessionData;
+    } catch (err) {
+      console.warn("Could not load session status:", err);
+      return previous || null;
+    }
+  };
+
+  const loadAnnotatedVideo = async (targetSession?: Session | null) => {
+    if (!sessionId) return;
+
+    const currentSession = targetSession || session;
+
+    const hasMov =
+      currentSession?.movUploadStatus === "uploaded" ||
+      Boolean(currentSession?.movKey) ||
+      Boolean(currentSession?.movFile);
+
+    if (!hasMov) {
+      setVideoUrl("");
+      setVideoMessage(
+        "No MOV file was uploaded for this session. CSV insights are available, but annotated video is not available."
+      );
+      return;
+    }
+
+    if (!isAnalysisFinished(currentSession)) {
+      setVideoUrl("");
+      setVideoMessage(
+        "Annotated video will appear after ML processing is completed."
+      );
+      return;
+    }
+
+    try {
+      setVideoLoading(true);
+      setVideoMessage("");
+
+      const res = await fetch(
+        `${API_BASE_URL}/sessions/${sessionId}/results/video`,
+        {
+          method: "GET",
+          headers: { ...getAuthHeaders() },
+        }
+      );
+
+      if (res.status === 404) {
+        setVideoUrl("");
+        setVideoMessage(
+          "Analysis completed, but no annotated video was returned for this session."
+        );
+        return;
+      }
+
+      if (res.status === 409) {
+        setVideoUrl("");
+        setVideoMessage(
+          "Video is still being prepared. Please refresh results in a moment."
+        );
+        return;
+      }
+
+      if (res.status === 401) {
+        setVideoUrl("");
+        setVideoMessage("Unauthorized. Please login again.");
+        return;
+      }
+
+      if (!res.ok) {
+        const text = await readErrorText(res);
+        setVideoUrl("");
+        setVideoMessage(`Failed to load annotated video: ${res.status} ${text}`);
+        return;
+      }
+
+      const data = await res.json();
+      const url = getVideoUrlFromResponse(data);
+
+      if (!url) {
+        setVideoUrl("");
+        setVideoMessage("Backend did not return a video URL.");
+        return;
+      }
+
+      setVideoUrl(url);
+      setVideoMessage("");
+    } catch (err) {
+      console.error("[VIDEO] could not load annotated video:", err);
+      setVideoUrl("");
+      setVideoMessage("Could not load annotated video.");
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const loadInsights = async (targetSession?: Session | null) => {
+    if (!sessionId) return;
+
+    const currentSession = targetSession || session;
+
+    if (!isAnalysisFinished(currentSession)) {
+      setInsightMessage(
+        "Analysis is still processing. Results will appear after ML processing is completed."
+      );
+      setInsights(normaliseInsights({}));
+      return;
+    }
+
+    try {
+      setInsightLoading(true);
+      setInsightMessage("");
+
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/results`, {
+        method: "GET",
+        headers: { ...getAuthHeaders() },
+      });
+
+      if (res.status === 409) {
+        setInsightMessage("Analysis is still processing.");
+        setInsights(normaliseInsights({}));
+        return;
+      }
+
+      if (res.status === 401) {
+        setInsightMessage("Unauthorized. Please login again.");
+        setInsights(normaliseInsights({}));
+        return;
+      }
+
+      if (!res.ok) {
+        const text = await readErrorText(res);
+        setInsightMessage(`Failed to load insight results: ${res.status} ${text}`);
+        setInsights(normaliseInsights({}));
+        return;
+      }
+
+      const data = await res.json();
+      console.log("Insight results response:", data);
+      setInsights(normaliseInsights(data));
+    } catch (err) {
+      console.warn("Could not load insight results:", err);
+      setInsightMessage("Could not load insight results.");
+      setInsights(normaliseInsights({}));
+    } finally {
+      setInsightLoading(false);
+    }
+  };
+
+  const loadResultsIfReady = async (targetSession: Session | null) => {
+    if (!targetSession) return;
+
+    if (isAnalysisFinished(targetSession)) {
+      await Promise.all([
+        loadInsights(targetSession),
+        loadAnnotatedVideo(targetSession),
+      ]);
+      return;
+    }
+
+    if (isAnalysisFailed(targetSession)) {
+      setInsightMessage("Analysis failed.");
+      setVideoMessage("Analysis failed, so annotated video is not available.");
+      setInsights(normaliseInsights({}));
+      return;
+    }
+
+    setInsightMessage("Analysis is still processing.");
+    setVideoMessage("Annotated video will appear after processing.");
+    setInsights(normaliseInsights({}));
+  };
+
+  const clearPolling = () => {
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const startPolling = () => {
+    clearPolling();
+
+    pollingRef.current = window.setInterval(async () => {
+      const currentSession = await loadSessionStatus(session);
+
+      if (!currentSession) return;
+
+      if (isAnalysisFinished(currentSession) || isAnalysisFailed(currentSession)) {
+        clearPolling();
+        await loadResultsIfReady(currentSession);
+      }
+    }, 5000);
+  };
+
+  const loadPage = async () => {
+    try {
+      setPageLoading(true);
+      setError("");
+      setVideoMessage("");
+      setInsightMessage("");
+
+      const detail = await loadSessionDetail();
+      const status = await loadSessionStatus(detail);
+      const currentSession = status || detail;
+
+      await loadResultsIfReady(currentSession);
+
+      if (
+        currentSession &&
+        isAnalysisRunning(currentSession) &&
+        !isAnalysisFinished(currentSession)
+      ) {
+        startPolling();
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Could not load insights page.");
+    } finally {
+      setPageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPage();
+
+    return () => {
+      clearPolling();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  const handleStartAnalysis = async () => {
+    if (!sessionId) return;
+
+    try {
+      setAnalyzeLoading(true);
+      setError("");
+      setInsightMessage("");
+      setVideoMessage("");
+
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/analyze`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (res.status === 401) {
+        setError("Unauthorized. Please login again.");
+        return;
+      }
+
+      if (!res.ok && res.status !== 409) {
+        const text = await readErrorText(res);
+        setError(`Could not start analysis: ${res.status} ${text}`);
+        return;
+      }
+
+      const currentSession = await loadSessionStatus(session);
+      setInsightMessage("Analysis has started.");
+      if (currentSession) startPolling();
+    } catch (err) {
+      console.error(err);
+      setError("Could not start analysis.");
+    } finally {
+      setAnalyzeLoading(false);
+    }
+  };
+
+  const statusClass = (status?: string) => {
+    const value = (status || "").toLowerCase();
+
+    if (value === "completed" || value === "complete") {
+      return "bg-green-100 text-green-700 border-green-200";
+    }
+
+    if (value === "ready" || value === "uploaded") {
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    }
+
+    if (
+      value === "processing" ||
+      value === "queued" ||
+      value === "preprocessing" ||
+      value === "inferencing"
+    ) {
+      return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    }
+
+    if (value === "failed" || value === "error") {
+      return "bg-red-100 text-red-700 border-red-200";
+    }
+
+    return "bg-purple-100 text-purple-700 border-purple-200";
+  };
+
+  const hasCsvUploaded =
+    session?.csvUploadStatus === "uploaded" ||
+    Boolean(session?.csvKey) ||
+    Boolean(session?.csvFile);
+
+  const hasMovUploaded =
+    session?.movUploadStatus === "uploaded" ||
+    Boolean(session?.movKey) ||
+    Boolean(session?.movFile);
+
+  const canRunAnalysis = useMemo(() => {
+    if (!session) return false;
+
+    const hasCsv =
+      session.csvUploadStatus === "uploaded" ||
+      Boolean(session.csvKey) ||
+      Boolean(session.csvFile);
+
+    return (
+      session.status === "ready" &&
+      hasCsv &&
+      !isAnalysisRunning(session) &&
+      !isAnalysisFinished(session)
+    );
+  }, [session]);
+
+  const analysisButtonLabel =
+    hasCsvUploaded && hasMovUploaded
+      ? "Run Full Analysis"
+      : hasCsvUploaded
+      ? "Run CSV Insights"
+      : "CSV Required";
+
+  const advanced = insights?.advancedInsights;
+  const advancedEvents = Array.isArray(advanced?.eventMetrics)
+    ? advanced?.eventMetrics || []
+    : [];
+
+  const punchTypeAverages = Array.isArray(advanced?.punchTypeAverages)
+    ? advanced?.punchTypeAverages || []
+    : [];
+
+  const coachingInsights = Array.isArray(advanced?.coachingInsights)
+    ? advanced?.coachingInsights || []
+    : [];
+
+  const summaryCards = [
+    {
+      label: "Total Punches",
+      value: insights?.totalPunches ?? "N/A",
+      icon: Dumbbell,
+    },
+    {
+      label: "Punch Rate",
+      value: insights?.punchRate ?? "N/A",
+      icon: Zap,
+    },
+    {
+      label: "Session Duration",
+      value: insights?.sessionDuration ?? "N/A",
+      icon: Timer,
+    },
+    {
+      label: "Dominant Punch",
+      value: insights?.dominantPunch ?? "N/A",
+      icon: Target,
+    },
+    {
+      label: "Average Confidence",
+      value: insights?.avgConfidence ?? "N/A",
+      icon: ShieldCheck,
+    },
+    {
+      label: "Avg Peak Acceleration",
+      value: insights?.avgPeakAcceleration ?? "N/A",
+      icon: Gauge,
+    },
+  ];
+
+  const donutItems = [
+    {
+      label: "Jab",
+      value: Number(insights?.jabCount || 0),
+      color: "#8b5cf6",
+    },
+    {
+      label: "Hook",
+      value: Number(insights?.hookCount || 0),
+      color: "#c084fc",
+    },
+    {
+      label: "Uppercut",
+      value: Number(insights?.uppercutCount || 0),
+      color: "#ddd6fe",
+    },
+  ];
+
+  const groupedTimingData = (() => {
+    if (punchTypeAverages.length > 0) {
+      return punchTypeAverages.map((item: any) => ({
+        label: item.type || "Unknown",
+        forward: Number(item.avgForwardTime) || 0,
+        retraction: Number(item.avgRetractionTime) || 0,
+      }));
+    }
+
+    const grouped: Record<
+      string,
+      { count: number; forward: number; retraction: number }
+    > = {};
+
+    advancedEvents.forEach((event: any) => {
+      const type = event.type || "Unknown";
+      if (!grouped[type]) {
+        grouped[type] = { count: 0, forward: 0, retraction: 0 };
+      }
+
+      grouped[type].count += 1;
+      grouped[type].forward += Number(event.forwardTime) || 0;
+      grouped[type].retraction += Number(event.retractionTime) || 0;
+    });
+
+    return Object.entries(grouped).map(([label, value]) => ({
+      label,
+      forward: value.count ? value.forward / value.count : 0,
+      retraction: value.count ? value.retraction / value.count : 0,
+    }));
+  })();
+
+  const peakAccelerationTrend = advancedEvents
+    .filter((event: any) => Number.isFinite(Number(event.peakAcceleration)))
+    .slice(0, 20)
+    .map((event: any, index: number) => ({
+      label: `#${event.eventId || index + 1}`,
+      value: Number(event.peakAcceleration),
+    }));
+
+  const retractionFatigueTrend = advancedEvents
+    .filter((event: any) =>
+      Number.isFinite(Number(event.avgRetractionAcceleration))
+    )
+    .slice(0, 20)
+    .map((event: any, index: number) => ({
+      label: `#${event.eventId || index + 1}`,
+      value: Number(event.avgRetractionAcceleration),
+    }));
+
+  const eventTableData =
+    advancedEvents.length > 0 ? advancedEvents : insights?.punchEvents || [];
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-sm font-medium text-slate-500">{title}</p>

@@ -210,7 +210,7 @@ function runPythonProcess(pythonBin, args, options = {}) {
   });
 }
 
-async function runSessionInference(session, analysisOptions = {}) {
+async function runSessionInference(session) {
   console.log("[ML SERVICE] runSessionInference entered:", {
     sessionId: session.id,
     csvKey: session.csvKey,
@@ -218,7 +218,6 @@ async function runSessionInference(session, analysisOptions = {}) {
     python: resolvePythonBin(),
     bucket: getS3Bucket(),
     region: getAwsRegion(),
-    analysisOptions,
   });
 
   if (!session.csvKey && !session.movKey) {
@@ -227,21 +226,6 @@ async function runSessionInference(session, analysisOptions = {}) {
 
   const scriptPath = resolveInferenceScriptPath();
   await assertFileExists(scriptPath, "ML inference script");
-
-  const {
-    model = "mediapipe",
-    duration,
-    imuAnalysis = false,
-    syncMode = "none",
-    offsetR,
-    offsetL,
-    jumpWindowStart,
-    jumpWindowEnd,
-    renderVideo = true,
-    exportExcel = true,
-    exportCsv = true,
-  } = analysisOptions || {};
-
 
   const args = [
     scriptPath,
@@ -261,52 +245,10 @@ async function runSessionInference(session, analysisOptions = {}) {
     args.push("--mov-key", session.movKey);
   }
 
-  args.push("--model", model);
-
-  if (duration !== undefined && duration !== null && duration !== "") {
-    args.push("--duration", String(duration));
-  }
-
-  if (imuAnalysis) {
-    args.push("--imu-analysis");
-  }
-
-  if (syncMode === "manual") {
-    args.push("--sync");
-
-    if (offsetR !== undefined && offsetR !== null) {
-      args.push("--offset-r", String(offsetR));
-    }
-
-    if (offsetL !== undefined && offsetL !== null) {
-      args.push("--offset-l", String(offsetL));
-    }
-  }
-
-  if (syncMode === "auto") {
-    args.push("--sync");
-    args.push("--sync-auto");
-    args.push("--jump-window", String(jumpWindowStart), String(jumpWindowEnd));
-  }
-
-  if (!renderVideo) {
-    args.push("--no-render");
-  }
-
-  if (!exportExcel) {
-    args.push("--no-excel");
-  }
-
-  if (!exportCsv) {
-    args.push("--no-csv");
-  }
-
-
   console.log("[ML SERVICE] about to run inference:", {
     scriptPath,
     hasCsv: Boolean(session.csvKey),
     hasMov: Boolean(session.movKey),
-    analysisOptions,
   });
 
   const { stdout } = await runPythonProcess(resolvePythonBin(), args, {
