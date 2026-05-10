@@ -36,7 +36,11 @@ async function getSessionStatus(req, res) {
 
 async function startSessionAnalysis(req, res) {
   try {
-    const payload = await sessionsService.startSessionAnalysis(req.params.id, req.userId);
+    const payload = await sessionsService.startSessionAnalysis(
+      req.params.id,
+      req.userId,
+      req.body || {}
+    );
     res.status(202).json(payload);
   } catch (error) {
     handleControllerError(res, error, 'Failed to start session analysis');

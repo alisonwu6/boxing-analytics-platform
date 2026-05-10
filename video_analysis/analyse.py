@@ -32,11 +32,12 @@ import cv2
 import numpy as np
 
 from core.landmarks import extract_landmarks
-from core.signals   import smooth_joints, interp_joints, compute_signals, hip_y_signal
+from core.signals import smooth_joints, interp_joints, compute_signals, hip_y_signal
 from core.jab_detect import detect_jabs, apply_shoulder_zone_filter
 from output.video_writer import render
-from output.excel        import export_excel
-from output.csv_export   import save_tracking_csv
+from output.excel import export_excel
+from output.csv_export import save_tracking_csv
+
 
 
 def _progress(pct, msg):
@@ -45,11 +46,15 @@ def _progress(pct, msg):
 
 def _load_imu(path, label):
     try:
-        from boxing_analytics.core.imu import IMUProcessor
+        from core.imu import IMUProcessor
     except ImportError:
-        sys.exit("boxing_analytics package not found — make sure it's in the Python path")
+        sys.exit(
+            "IMU analysis is not available because core/imu.py was not found. "
+            "Disable --imu-analysis and --sync, or add core/imu.py to video_analysis/core."
+        )
+
     proc = IMUProcessor()
-    imu  = proc.load(path, label=label)
+    imu = proc.load(path, label=label)
     return imu
 
 

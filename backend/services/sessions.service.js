@@ -35,6 +35,101 @@ function buildEmptyResults() {
   };
 }
 
+
+function normaliseAnalysisOptions(input = {}, hasCsv = false) {
+  const {
+    model = 'mediapipe',
+    duration,
+    imuAnalysis = false,
+    syncMode = 'none',
+    offsetR,
+    offsetL,
+    jumpWindowStart,
+    jumpWindowEnd,
+    renderVideo = true,
+    exportExcel = true,
+    exportCsv = true,
+  } = input || {};
+
+  if (!['mediapipe', 'yolo'].includes(model)) {
+    throw createHttpError(400, 'Invalid model. Use mediapipe or yolo.');
+  }
+
+  if (!['none', 'manual', 'auto'].includes(syncMode)) {
+    throw createHttpError(400, 'Invalid sync mode.');
+  }
+
+  const safeDuration = duration !== undefined && duration !== null && duration !== ''
+    ? Number(duration)
+    : undefined;
+
+  if (safeDuration !== undefined && (!Number.isFinite(safeDuration) || safeDuration <= 0)) {
+    throw createHttpError(400, 'Duration must be a positive number.');
+  }
+
+  if (imuAnalysis && !hasCsv) {
+    throw createHttpError(400, 'IMU analysis requires a CSV / IMU file.');
+  }
+
+  if (syncMode !== 'none' && !hasCsv) {
+    throw createHttpError(400, 'Sync requires a CSV / IMU file.');
+  }
+
+  const safeOffsetR = offsetR !== undefined && offsetR !== null && offsetR !== ''
+    ? Number(offsetR)
+    : undefined;
+  const safeOffsetL = offsetL !== undefined && offsetL !== null && offsetL !== ''
+    ? Number(offsetL)
+    : undefined;
+
+  if (safeOffsetR !== undefined && !Number.isFinite(safeOffsetR)) {
+    throw createHttpError(400, 'offsetR must be a valid number.');
+  }
+
+  if (safeOffsetL !== undefined && !Number.isFinite(safeOffsetL)) {
+    throw createHttpError(400, 'offsetL must be a valid number.');
+  }
+
+  if (syncMode === 'manual' && safeOffsetR === undefined && safeOffsetL === undefined) {
+    throw createHttpError(400, 'Manual sync requires offsetR or offsetL.');
+  }
+
+  const safeJumpWindowStart = jumpWindowStart !== undefined && jumpWindowStart !== null && jumpWindowStart !== ''
+    ? Number(jumpWindowStart)
+    : undefined;
+  const safeJumpWindowEnd = jumpWindowEnd !== undefined && jumpWindowEnd !== null && jumpWindowEnd !== ''
+    ? Number(jumpWindowEnd)
+    : undefined;
+
+  if (syncMode === 'auto') {
+    if (safeJumpWindowStart === undefined || safeJumpWindowEnd === undefined) {
+      throw createHttpError(400, 'Auto sync requires jumpWindowStart and jumpWindowEnd.');
+    }
+
+    if (!Number.isFinite(safeJumpWindowStart) || !Number.isFinite(safeJumpWindowEnd)) {
+      throw createHttpError(400, 'Jump window values must be valid numbers.');
+    }
+
+    if (safeJumpWindowStart >= safeJumpWindowEnd) {
+      throw createHttpError(400, 'jumpWindowStart must be smaller than jumpWindowEnd.');
+    }
+  }
+
+  return {
+    model,
+    duration: safeDuration,
+    imuAnalysis: Boolean(imuAnalysis),
+    syncMode,
+    offsetR: safeOffsetR,
+    offsetL: safeOffsetL,
+    jumpWindowStart: safeJumpWindowStart,
+    jumpWindowEnd: safeJumpWindowEnd,
+    renderVideo: Boolean(renderVideo),
+    exportExcel: Boolean(exportExcel),
+    exportCsv: Boolean(exportCsv),
+  };
+}
+
 function normaliseSessionStatus(status) {
   const validStatuses = new Set(['draft', 'ready', 'processing', 'completed', 'failed']);
 
@@ -202,7 +297,7 @@ async function getSessionStatus(id, userId) {
   };
 }
 
-async function startSessionAnalysis(id, userId) {
+async function startSessionAnalysis(id, userId, analysisOptions = {}) {
   console.log("[ANALYZE SERVICE] request received:", {
     sessionId: id,
     userId,
@@ -220,6 +315,7 @@ async function startSessionAnalysis(id, userId) {
 
   const hasCsv = Boolean(session.csvKey || session.csvFile);
   const hasMov = Boolean(session.movKey || session.movFile);
+  const safeAnalysisOptions = normaliseAnalysisOptions(analysisOptions, hasCsv);
 
   if (!hasCsv) {
     throw createHttpError(
@@ -264,6 +360,7 @@ async function startSessionAnalysis(id, userId) {
       errorMessage: null,
       processingStartedAt: updatedAt,
       processingFinishedAt: null,
+      analysisOptions: safeAnalysisOptions,
     },
     updatedAt,
   };
@@ -281,7 +378,7 @@ async function startSessionAnalysis(id, userId) {
   });
 
   setImmediate(() => {
-    _runInferenceBackground(saved).catch((error) => {
+    _runInferenceBackground(saved, safeAnalysisOptions).catch((error) => {
       console.error("[ANALYZE SERVICE] background job crashed:", {
         sessionId: saved.id,
         message: error.message,
@@ -299,10 +396,11 @@ async function startSessionAnalysis(id, userId) {
     status: saved.status,
     processingStatus: saved.processingStatus,
     analysisMode,
+    analysisOptions: safeAnalysisOptions,
   };
 }
 
-async function _runInferenceBackground(session) {
+async function _runInferenceBackground(session, analysisOptions = {}) {
   const startedAt =
     session.results?.processingStartedAt || new Date().toISOString();
 
@@ -325,6 +423,7 @@ async function _runInferenceBackground(session) {
         errorMessage: null,
         processingStartedAt: startedAt,
         processingFinishedAt: null,
+        analysisOptions,
       },
       updatedAt: inferencingAt,
     };
@@ -337,17 +436,7 @@ async function _runInferenceBackground(session) {
 
     console.log("[ANALYZE JOB] calling runSessionInference...");
 
-    const { payload } = await runSessionInference(runningSession);
-
-    console.log("[ANALYZE JOB] runSessionInference returned:", {
-      sessionId: session.id,
-      modelVersion: payload?.modelVersion,
-      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
-      punchEventsCount: Array.isArray(payload?.punchEvents)
-        ? payload.punchEvents.length
-        : 0,
-      artifacts: payload?.artifacts,
-    });
+    const { payload } = await runSessionInference(runningSession, analysisOptions);
 
     const finishedAt = new Date().toISOString();
 
@@ -364,6 +453,7 @@ async function _runInferenceBackground(session) {
         errorMessage: null,
         processingStartedAt: startedAt,
         processingFinishedAt: finishedAt,
+        analysisOptions,
       },
       updatedAt: finishedAt,
     });
@@ -396,6 +486,7 @@ async function _runInferenceBackground(session) {
           errorMessage: error.message || "Inference failed",
           processingStartedAt: startedAt,
           processingFinishedAt: finishedAt,
+          analysisOptions: latestSession.results?.analysisOptions || analysisOptions,
         },
         updatedAt: finishedAt,
       });
