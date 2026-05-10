@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+;import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -88,6 +88,20 @@ type MetricItem = {
   label: string;
   value: unknown;
 };
+type VideoOptions = {
+  model: "mediapipe" | "yolo";
+  duration: string;
+  noRender: boolean;
+  noExcel: boolean;
+  noCsv: boolean;
+  enableImuOverlay: boolean;
+  sync: boolean;
+  syncAuto: boolean;
+  offsetR: string;
+  offsetL: string;
+  jumpWindowStart: string;
+  jumpWindowEnd: string;
+};
 
 const CHART_COLORS = [
   "#7c3aed",
@@ -115,6 +129,21 @@ export default function InsightsPage() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
+
+  const [videoOptions, setVideoOptions] = useState<VideoOptions>({
+    model: "mediapipe",
+    duration: "30",
+    noRender: false,
+    noExcel: true,
+    noCsv: true,
+    enableImuOverlay: false,
+    sync: false,
+    syncAuto: false,
+    offsetR: "",
+    offsetL: "",
+    jumpWindowStart: "",
+    jumpWindowEnd: "",
+    });
 
   const token =
     localStorage.getItem("token") ||
@@ -228,22 +257,32 @@ export default function InsightsPage() {
   }
 
   async function startAnalysis() {
-    if (!sessionId) return;
+  if (!sessionId) return;
 
-    try {
-      setAnalyzing(true);
-      setError("");
+  try {
+    setAnalyzing(true);
+    setError("");
 
-      await apiFetch(`/sessions/${sessionId}/analyze`, {
-        method: "POST",
-      });
+    await apiFetch(`/sessions/${sessionId}/analyze`, {
+      method: "POST",
+      body: JSON.stringify({
+        videoOptions: {
+          ...videoOptions,
+          duration: videoOptions.duration.trim() === "" ? "" : Number(videoOptions.duration),
+          jumpWindowStart: videoOptions.jumpWindowStart.trim(),
+          jumpWindowEnd: videoOptions.jumpWindowEnd.trim(),
+          offsetR: videoOptions.offsetR.trim(),
+          offsetL: videoOptions.offsetL.trim(),
+        },
+      }),
+    });
 
-      await pollStatus();
-    } catch (err: any) {
-      setError(err.message || "Failed to start analysis.");
-      setAnalyzing(false);
-    }
+    await pollStatus();
+  } catch (err: any) {
+    setError(err.message || "Failed to start analysis.");
+    setAnalyzing(false);
   }
+}
 
   async function pollStatus() {
     if (!sessionId) return;
@@ -368,6 +407,12 @@ export default function InsightsPage() {
           activeView={activeView}
           onChange={setActiveView}
         />
+        {activeView === "video" && (
+          <VideoAnalysisOptionsPanel
+            options={videoOptions}
+            onChange={setVideoOptions}
+          />
+        )}
 
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           {loadingResults ? (
@@ -1138,6 +1183,299 @@ function VideoPunchTimeline({
       </div>
     </div>
   );
+}
+
+function VideoAnalysisOptionsPanel({
+  options,
+  onChange,
+}: {
+  options: VideoOptions;
+  onChange: React.Dispatch<React.SetStateAction<VideoOptions>>;
+}) {
+  function updateOption<K extends keyof VideoOptions>(
+    key: K,
+    value: VideoOptions[K]
+  ) {
+    onChange((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  }
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-5">
+        <h3 className="text-lg font-bold text-slate-900">
+          Video Analysis Options
+        </h3>
+        <p className="mt-1 text-sm text-slate-500">
+          These options are passed to the Python video analysis command as CLI flags.
+        </p>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">
+            Pose Model
+          </label>
+          <select
+            value={options.model}
+            onChange={(event) =>
+              updateOption("model", event.target.value as "mediapipe" | "yolo")
+            }
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+          >
+            <option value="mediapipe">MediaPipe faster CPU</option>
+            <option value="yolo">YOLO slower, better occlusion</option>
+          </select>
+          <p className="text-xs text-slate-500">
+            CLI: <code>--model {options.model}</code>
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">
+            Duration seconds
+          </label>
+          <input
+            type="number"
+            min="1"
+            placeholder="Empty = full video"
+            value={options.duration}
+            onChange={(event) => updateOption("duration", event.target.value)}
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+          />
+          <p className="text-xs text-slate-500">
+            CLI:{" "}
+            {options.duration.trim()
+              ? `--duration ${options.duration}`
+              : "full video"}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">
+            Output Mode
+          </label>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Keep <strong>Render Video</strong> on if you want the annotated video
+            to display in this page.
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <OptionToggle
+          title="Render annotated video"
+          description="Needed for video playback."
+          checked={!options.noRender}
+          onChange={(checked) => updateOption("noRender", !checked)}
+          cliFlag={options.noRender ? "--no-render" : "render enabled"}
+        />
+
+        <OptionToggle
+          title="Skip Excel report"
+          description="Faster processing."
+          checked={options.noExcel}
+          onChange={(checked) => updateOption("noExcel", checked)}
+          cliFlag={options.noExcel ? "--no-excel" : "excel enabled"}
+        />
+
+        <OptionToggle
+          title="Skip tracking CSV"
+          description="Faster processing."
+          checked={options.noCsv}
+          onChange={(checked) => updateOption("noCsv", checked)}
+          cliFlag={options.noCsv ? "--no-csv" : "tracking csv enabled"}
+        />
+
+        <OptionToggle
+          title="IMU overlay"
+          description="Requires CSV and IMU package."
+          checked={options.enableImuOverlay}
+          onChange={(checked) => updateOption("enableImuOverlay", checked)}
+          cliFlag={
+            options.enableImuOverlay ? "--imu-analysis" : "imu overlay off"
+          }
+        />
+      </div>
+
+      {options.enableImuOverlay && (
+        <div className="mt-6 rounded-3xl border border-purple-100 bg-purple-50 p-5">
+          <div className="mb-4">
+            <h4 className="font-bold text-purple-950">IMU Synchronisation</h4>
+            <p className="mt-1 text-sm text-purple-700">
+              Use these only if you want to align video time with IMU sensor time.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <OptionToggle
+              title="Enable sync"
+              description="Adds --sync"
+              checked={options.sync}
+              onChange={(checked) => updateOption("sync", checked)}
+              cliFlag={options.sync ? "--sync" : "sync off"}
+            />
+
+            <OptionToggle
+              title="Auto sync"
+              description="Uses jump window."
+              checked={options.syncAuto}
+              onChange={(checked) => updateOption("syncAuto", checked)}
+              cliFlag={options.syncAuto ? "--sync-auto" : "manual sync"}
+            />
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-purple-950">
+                Offset R seconds
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={options.offsetR}
+                onChange={(event) =>
+                  updateOption("offsetR", event.target.value)
+                }
+                placeholder="e.g. 9.4"
+                className="w-full rounded-2xl border border-purple-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+              />
+              <p className="text-xs text-purple-700">
+                CLI:{" "}
+                {options.offsetR ? `--offset-r ${options.offsetR}` : "not set"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-purple-950">
+                Offset L seconds
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={options.offsetL}
+                onChange={(event) =>
+                  updateOption("offsetL", event.target.value)
+                }
+                placeholder="e.g. 11.0"
+                className="w-full rounded-2xl border border-purple-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+              />
+              <p className="text-xs text-purple-700">
+                CLI:{" "}
+                {options.offsetL ? `--offset-l ${options.offsetL}` : "not set"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-purple-950">
+                Jump Window Start
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={options.jumpWindowStart}
+                onChange={(event) =>
+                  updateOption("jumpWindowStart", event.target.value)
+                }
+                placeholder="e.g. 5"
+                className="w-full rounded-2xl border border-purple-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-purple-950">
+                Jump Window End
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={options.jumpWindowEnd}
+                onChange={(event) =>
+                  updateOption("jumpWindowEnd", event.target.value)
+                }
+                placeholder="e.g. 25"
+                className="w-full rounded-2xl border border-purple-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6 rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
+        <p className="mb-2 font-semibold text-white">Command flags preview</p>
+        <code className="whitespace-pre-wrap break-words">
+          {buildVideoCommandPreview(options)}
+        </code>
+      </div>
+    </div>
+  );
+}
+
+function OptionToggle({
+  title,
+  description,
+  checked,
+  onChange,
+  cliFlag,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  cliFlag: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-purple-200 hover:bg-purple-50">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1 h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+      />
+
+      <div>
+        <p className="font-semibold text-slate-900">{title}</p>
+        <p className="mt-1 text-xs text-slate-500">{description}</p>
+        <p className="mt-2 rounded-lg bg-white px-2 py-1 font-mono text-xs text-slate-500">
+          {cliFlag}
+        </p>
+      </div>
+    </label>
+  );
+}
+
+function buildVideoCommandPreview(options: VideoOptions) {
+  const flags = [
+    "python analyse.py",
+    "--video input.mov",
+    `--model ${options.model}`,
+  ];
+
+  if (options.duration.trim()) {
+    flags.push(`--duration ${options.duration}`);
+  }
+
+  if (options.noRender) flags.push("--no-render");
+  if (options.noExcel) flags.push("--no-excel");
+  if (options.noCsv) flags.push("--no-csv");
+
+  if (options.enableImuOverlay) {
+    flags.push("--imu-r imu.csv");
+    flags.push("--imu-analysis");
+
+    if (options.sync) flags.push("--sync");
+    if (options.syncAuto) flags.push("--sync-auto");
+    if (options.offsetR.trim()) flags.push(`--offset-r ${options.offsetR}`);
+    if (options.offsetL.trim()) flags.push(`--offset-l ${options.offsetL}`);
+
+    if (options.jumpWindowStart.trim() && options.jumpWindowEnd.trim()) {
+      flags.push(
+        `--jump-window ${options.jumpWindowStart} ${options.jumpWindowEnd}`
+      );
+    }
+  }
+
+  return flags.join(" ");
 }
 
 function SummaryCard({

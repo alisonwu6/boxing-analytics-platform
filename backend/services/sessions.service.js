@@ -202,12 +202,12 @@ async function getSessionStatus(id, userId) {
   };
 }
 
-async function startSessionAnalysis(id, userId) {
+async function startSessionAnalysis(id, userId, analysisRequest = {}) {
   console.log("[ANALYZE SERVICE] request received:", {
     sessionId: id,
     userId,
   });
-
+  const videoOptions = analysisRequest.videoOptions || {};
   const session = await sessionsRepository.findSessionById(id);
 
   if (!session) {
@@ -266,11 +266,11 @@ async function startSessionAnalysis(id, userId) {
   const saved = await sessionsRepository.updateSession(id, nextSession);
 
   setImmediate(() => {
-    _runInferenceBackground(saved).catch((error) => {
-      console.error("[ANALYZE SERVICE] background job crashed:", {
-        sessionId: saved.id,
-        message: error.message,
-        stack: error.stack,
+  _runInferenceBackground(saved, videoOptions).catch((error) => {
+    console.error("[ANALYZE SERVICE] background job crashed:", {
+      sessionId: saved.id,
+      message: error.message,
+      stack: error.stack,
       });
     });
   });
@@ -290,7 +290,7 @@ async function startSessionAnalysis(id, userId) {
 }
 
 
-async function _runInferenceBackground(session) {
+async function _runInferenceBackground(session, videoOptions = {}) {
   const startedAt =
     session.results?.processingStartedAt || new Date().toISOString();
 
@@ -319,7 +319,7 @@ async function _runInferenceBackground(session) {
 
     await sessionsRepository.updateSession(session.id, runningSession);
 
-    const { payload } = await runSessionInference(runningSession);
+    const { payload } = await runSessionInference(runningSession, videoOptions);
 
     const finishedAt = new Date().toISOString();
 

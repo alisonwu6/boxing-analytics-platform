@@ -210,7 +210,7 @@ function runPythonProcess(pythonBin, args, options = {}) {
   });
 }
 
-async function runSessionInference(session) {
+async function runSessionInference(session, videoOptions = {}) {
   console.log("[ML SERVICE] runSessionInference entered:", {
     sessionId: session.id,
     csvKey: session.csvKey,
@@ -250,7 +250,53 @@ async function runSessionInference(session) {
     hasCsv: Boolean(session.csvKey),
     hasMov: Boolean(session.movKey),
   });
+  if (videoOptions.model) {
+    args.push("--video-model", String(videoOptions.model));
+  }
 
+  if (videoOptions.duration !== undefined && videoOptions.duration !== "") {
+    args.push("--video-duration", String(videoOptions.duration));
+  }
+
+  if (videoOptions.noRender === true) {
+    args.push("--video-no-render");
+  }
+
+  if (videoOptions.noExcel === true) {
+  args.push("--video-no-excel");
+  }
+
+  if (videoOptions.noCsv === true) {
+    args.push("--video-no-csv");
+  }
+
+  if (videoOptions.enableImuOverlay === true) {
+    args.push("--video-enable-imu-overlay");
+  }
+
+  if (videoOptions.sync === true) {
+    args.push("--video-sync");
+  } 
+
+  if (videoOptions.syncAuto === true) {
+    args.push("--video-sync-auto");
+  }
+
+  if (videoOptions.offsetR) {
+    args.push("--video-offset-r", String(videoOptions.offsetR));
+  }
+
+  if (videoOptions.offsetL) {
+    args.push("--video-offset-l", String(videoOptions.offsetL));
+  }
+
+  if (videoOptions.jumpWindowStart && videoOptions.jumpWindowEnd) {
+    args.push(
+      "--video-jump-window",
+      String(videoOptions.jumpWindowStart),
+      String(videoOptions.jumpWindowEnd)
+    );
+  }
   const { stdout } = await runPythonProcess(resolvePythonBin(), args, {
     cwd: getProjectRoot(),
   });

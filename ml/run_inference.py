@@ -27,6 +27,17 @@ def parse_args():
     parser.add_argument("--region", required=True, help="AWS region")
     parser.add_argument("--csv-key", default="", help="S3 key for IMU CSV file")
     parser.add_argument("--mov-key", default="", help="S3 key for MOV/MP4 video file")
+    parser.add_argument("--video-model", default="mediapipe")
+    parser.add_argument("--video-duration", default=None)
+    parser.add_argument("--video-no-render", action="store_true")
+    parser.add_argument("--video-no-excel", action="store_true")
+    parser.add_argument("--video-no-csv", action="store_true")
+    parser.add_argument("--video-enable-imu-overlay", action="store_true")
+    parser.add_argument("--video-sync", action="store_true")
+    parser.add_argument("--video-sync-auto", action="store_true")
+    parser.add_argument("--video-offset-r", default=None)
+    parser.add_argument("--video-offset-l", default=None)
+    parser.add_argument("--video-jump-window", nargs=2, default=None)
 
     return parser.parse_args()
 
@@ -51,7 +62,7 @@ def empty_result() -> dict:
     }
 
 
-def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -> dict:
+def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str, video_options: dict) -> dict:
     if not csv_key and not mov_key:
         raise ValueError("At least one of --csv-key or --mov-key is required")
 
@@ -75,6 +86,7 @@ def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -
             mov_key=mov_key,
             csv_key=csv_key or None,
             session_id=session_id,
+            video_options=video_options,
         )
 
         result.setdefault("artifacts", {})
@@ -100,6 +112,19 @@ def main():
             region=args.region,
             csv_key=args.csv_key,
             mov_key=args.mov_key,
+            video_options={
+                "model": args.video_model,
+                "duration": args.video_duration,
+                "no_render": args.video_no_render,
+                "no_excel": args.video_no_excel,
+                "no_csv": args.video_no_csv,
+                "enable_imu_overlay": args.video_enable_imu_overlay,
+                "sync": args.video_sync,
+                "sync_auto": args.video_sync_auto,
+                "offset_r": args.video_offset_r,
+                "offset_l": args.video_offset_l,
+                "jump_window": args.video_jump_window,
+            },
         )
     except Exception as exc:
         print(str(exc), file=sys.stderr)

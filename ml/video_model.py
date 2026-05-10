@@ -85,7 +85,7 @@ def _build_child_env() -> dict:
     return env
 
 
-def _run_video_cli(video_path: Path, csv_path: Optional[Path], out_stem: Path) -> None:
+def _run_video_cli(video_path: Path, csv_path: Optional[Path], out_stem: Path, video_options: dict) -> None:
     script = _analyse_script()
 
     if not script.exists():
@@ -99,7 +99,7 @@ def _run_video_cli(video_path: Path, csv_path: Optional[Path], out_stem: Path) -
         "--out",
         str(out_stem),
         "--model",
-        os.environ.get("VIDEO_POSE_MODEL", "mediapipe"),
+        video_options.get("model") or os.environ.get("VIDEO_POSE_MODEL", "mediapipe"),
     ]
 
     model_path = os.environ.get("VIDEO_MODEL_PATH")
@@ -109,7 +109,16 @@ def _run_video_cli(video_path: Path, csv_path: Optional[Path], out_stem: Path) -
     duration = os.environ.get("VIDEO_ANALYSIS_DURATION_SECS")
     if duration:
         command.extend(["--duration", duration])
+   
+    if video_options.get("no_render"):
+        command.append("--no-render")
 
+    if video_options.get("no_excel"):
+        command.append("--no-excel")
+
+    if video_options.get("no_csv"):
+        command.append("--no-csv")
+        
     if csv_path:
         command.extend(["--imu-r", str(csv_path), "--imu-analysis"])
 
@@ -275,6 +284,7 @@ def infer(
     mov_key: str,
     csv_key: Optional[str],
     session_id: str,
+    video_options: Optional[dict] = None,
 ) -> dict:
     s3 = boto3.client("s3", region_name=region)
 
@@ -300,6 +310,7 @@ def infer(
             video_path=video_path,
             csv_path=csv_path,
             out_stem=out_stem,
+            video_options=video_options or {},
         )
 
         raw_video_path = out_stem.with_suffix(".mp4")
