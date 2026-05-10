@@ -1,6 +1,6 @@
 import numpy as np
-from core.signals import gauss_smooth
-from core.landmarks import DRAW_JOINTS
+from ml.video_analysis.core.signals import gauss_smooth
+from ml.video_analysis.core.landmarks import DRAW_JOINTS
 
 _LW, _LE, _LS = 9, 7, 5
 _RW, _RE, _RS = 10, 8, 6

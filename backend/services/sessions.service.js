@@ -317,14 +317,14 @@ async function startSessionAnalysis(id, userId, analysisOptions = {}) {
   const hasMov = Boolean(session.movKey || session.movFile);
   const safeAnalysisOptions = normaliseAnalysisOptions(analysisOptions, hasCsv);
 
-  if (!hasCsv) {
+  if (!hasCsv && !hasMov) {
     throw createHttpError(
       400,
-      "CSV file is required for ML analysis. Please upload a CSV file before running analysis."
+      "Please upload at least one file before running analysis."
     );
   }
 
-  const analysisMode = hasMov ? "full" : "csv_only";
+  const analysisMode = hasCsv && hasMov ? "full" : hasCsv ? "csv_only" : "video_only";
 
   console.log("[ANALYZE SERVICE] analysis mode:", {
     sessionId: session.id,
@@ -334,11 +334,6 @@ async function startSessionAnalysis(id, userId, analysisOptions = {}) {
   });
 
   if (session.status === "processing") {
-    console.log("[ANALYZE SERVICE] session is already processing:", {
-      sessionId: session.id,
-      processingStatus: session.processingStatus,
-    });
-
     return {
       message: "Session analysis is already running",
       sessionId: session.id,
@@ -367,16 +362,6 @@ async function startSessionAnalysis(id, userId, analysisOptions = {}) {
 
   const saved = await sessionsRepository.updateSession(id, nextSession);
 
-  console.log("[ANALYZE SERVICE] queued session:", {
-    sessionId: saved.id,
-    status: saved.status,
-    processingStatus: saved.processingStatus,
-    analysisMode,
-    csvKey: saved.csvKey,
-    movKey: saved.movKey,
-    python: process.env.PYTHON_BIN,
-  });
-
   setImmediate(() => {
     _runInferenceBackground(saved, safeAnalysisOptions).catch((error) => {
       console.error("[ANALYZE SERVICE] background job crashed:", {
@@ -391,7 +376,9 @@ async function startSessionAnalysis(id, userId, analysisOptions = {}) {
     message:
       analysisMode === "full"
         ? "Full analysis started"
-        : "CSV insights analysis started",
+        : analysisMode === "video_only"
+          ? "Video analysis started"
+          : "CSV insights analysis started",
     sessionId: saved.id,
     status: saved.status,
     processingStatus: saved.processingStatus,
@@ -430,53 +417,7 @@ async function _runInferenceBackground(session, analysisOptions = {}) {
 
     await sessionsRepository.updateSession(session.id, runningSession);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-    const { payload } = await runSessionInference(runningSession, analysisOptions);
-=======
-=======
->>>>>>> parent of a2d533c (update)
-=======
->>>>>>> parent of a2d533c (update)
-    console.log("[ANALYZE JOB] status changed to inferencing:", {
-      sessionId: session.id,
-    });
-
-    console.log("[ANALYZE JOB] calling runSessionInference...");
-
     const { payload } = await runSessionInference(runningSession);
->>>>>>> parent of a2d533c (update)
-
-    console.log("[ANALYZE JOB] runSessionInference returned:", {
-      sessionId: session.id,
-      modelVersion: payload?.modelVersion,
-      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
-      punchEventsCount: Array.isArray(payload?.punchEvents)
-        ? payload.punchEvents.length
-        : 0,
-      artifacts: payload?.artifacts,
-    });
-
-    console.log("[ANALYZE JOB] runSessionInference returned:", {
-      sessionId: session.id,
-      modelVersion: payload?.modelVersion,
-      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
-      punchEventsCount: Array.isArray(payload?.punchEvents)
-        ? payload.punchEvents.length
-        : 0,
-      artifacts: payload?.artifacts,
-    });
-
-    console.log("[ANALYZE JOB] runSessionInference returned:", {
-      sessionId: session.id,
-      modelVersion: payload?.modelVersion,
-      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
-      punchEventsCount: Array.isArray(payload?.punchEvents)
-        ? payload.punchEvents.length
-        : 0,
-      artifacts: payload?.artifacts,
-    });
 
     const finishedAt = new Date().toISOString();
 
@@ -529,11 +470,6 @@ async function _runInferenceBackground(session, analysisOptions = {}) {
           analysisOptions: latestSession.results?.analysisOptions || analysisOptions,
         },
         updatedAt: finishedAt,
-      });
-
-      console.log("[ANALYZE JOB] session marked as failed:", {
-        sessionId: session.id,
-        errorMessage: error.message,
       });
     } catch (updateError) {
       console.error("[ANALYZE JOB] failed to update failed status:", {
