@@ -289,6 +289,7 @@ async function startSessionAnalysis(id, userId) {
   };
 }
 
+
 async function _runInferenceBackground(session) {
   const startedAt =
     session.results?.processingStartedAt || new Date().toISOString();

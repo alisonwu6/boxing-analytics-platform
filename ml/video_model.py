@@ -38,7 +38,7 @@ def _project_root() -> Path:
 
 
 def _video_analysis_dir() -> Path:
-    return _project_root() / "ml" / "video_analysis"
+    return _project_root() / "video_analysis"
 
 
 def _analyse_script() -> Path:
@@ -72,16 +72,9 @@ def _input_suffix(s3_key: str, fallback: str) -> str:
 def _build_child_env() -> dict:
     env = os.environ.copy()
 
-    # Important:
-    # analyse.py imports modules like:
-    # from ml.video_analysis.core.landmarks import ...
-    #
-    # Therefore Python must be able to see the project root folder,
-    # not only the ml/video_analysis folder.
     paths = [
-        str(_project_root()),
-        str(_project_root() / "ml"),
         str(_video_analysis_dir()),
+        str(_project_root() / "ml" / "video_analysis"),
     ]
 
     existing = env.get("PYTHONPATH")
@@ -117,11 +110,7 @@ def _run_video_cli(video_path: Path, csv_path: Optional[Path], out_stem: Path) -
     if duration:
         command.extend(["--duration", duration])
 
-    enable_imu_overlay = (
-    os.environ.get("VIDEO_ENABLE_IMU_OVERLAY", "false").lower() == "true"
-)
-
-    if csv_path and enable_imu_overlay:
+    if csv_path:
         command.extend(["--imu-r", str(csv_path), "--imu-analysis"])
 
         offset_r = os.environ.get("VIDEO_OFFSET_R")
@@ -341,4 +330,3 @@ def infer(
             f"Video analysis completed with {len(video_punch_events)} video-detected jabs."
         ],
     }
->>>>>>> parent of a2d533c (update)
