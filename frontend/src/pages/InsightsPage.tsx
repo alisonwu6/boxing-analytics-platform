@@ -23,11 +23,15 @@ const API_BASE_URL =
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 type InsightView = "ml" | "video";
 type PoseModel = "mediapipe" | "yolo";
 type SyncMode = "none" | "manual" | "auto";
 
 type SessionData = {
+=======
+type Session = {
+>>>>>>> parent of a2d533c (update)
 =======
 type Session = {
 >>>>>>> parent of a2d533c (update)
@@ -85,6 +89,7 @@ function SummaryCard({
   icon: Icon,
 }: {
   label: string;
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
   value: unknown;
@@ -500,6 +505,13 @@ export default function InsightsPage() {
 }) {
   return (
 >>>>>>> parent of a2d533c (update)
+=======
+  value: any;
+  note?: string;
+  icon: any;
+}) {
+  return (
+>>>>>>> parent of a2d533c (update)
     <div className="rounded-3xl border border-gray-100 bg-gray-50 p-5 shadow-sm">
       <Icon className="mb-3 text-purple-600" size={24} />
       <p className="text-sm font-semibold text-gray-500">{label}</p>
@@ -507,6 +519,9 @@ export default function InsightsPage() {
       {note && <p className="mt-2 text-xs leading-5 text-gray-500">{note}</p>}
     </div>
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> parent of a2d533c (update)
+=======
 >>>>>>> parent of a2d533c (update)
 =======
 >>>>>>> parent of a2d533c (update)
@@ -560,6 +575,7 @@ function DonutChart({
           <div className="absolute flex h-32 w-32 flex-col items-center justify-center rounded-full bg-white shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
               {totalLabel}
+<<<<<<< HEAD
 <<<<<<< HEAD
             </p>
             <p className="mt-1 text-3xl font-extrabold text-purple-600">
@@ -1040,6 +1056,12 @@ function InsightViewSwitcher({
               />
             ))}
 =======
+>>>>>>> parent of a2d533c (update)
+=======
+            </p>
+            <p className="mt-1 text-3xl font-extrabold text-purple-600">
+              {totalValue}
+            </p>
 >>>>>>> parent of a2d533c (update)
 =======
             </p>
@@ -1561,6 +1583,7 @@ function CoachingCards({
             </div>
           ))}
 <<<<<<< HEAD
+<<<<<<< HEAD
         </div>
       ) : (
         <div className="rounded-2xl bg-white p-4 text-sm text-gray-500">
@@ -1711,6 +1734,13 @@ function PunchEventsTable({ events }: { events: Record<string, unknown>[] }) {
           Showing first 20 punch events.
         </p>
 =======
+>>>>>>> parent of a2d533c (update)
+=======
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-white p-4 text-sm text-gray-500">
+          Coaching insights are not available.
+        </div>
 >>>>>>> parent of a2d533c (update)
 =======
         </div>

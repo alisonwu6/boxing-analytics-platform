@@ -430,14 +430,43 @@ async function _runInferenceBackground(session, analysisOptions = {}) {
 
     await sessionsRepository.updateSession(session.id, runningSession);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+    const { payload } = await runSessionInference(runningSession, analysisOptions);
+=======
+=======
+>>>>>>> parent of a2d533c (update)
+=======
+>>>>>>> parent of a2d533c (update)
     console.log("[ANALYZE JOB] status changed to inferencing:", {
       sessionId: session.id,
     });
 
     console.log("[ANALYZE JOB] calling runSessionInference...");
 
-    const { payload } = await runSessionInference(runningSession, analysisOptions);
+    const { payload } = await runSessionInference(runningSession);
+>>>>>>> parent of a2d533c (update)
 
+    console.log("[ANALYZE JOB] runSessionInference returned:", {
+      sessionId: session.id,
+      modelVersion: payload?.modelVersion,
+      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
+      punchEventsCount: Array.isArray(payload?.punchEvents)
+        ? payload.punchEvents.length
+        : 0,
+      artifacts: payload?.artifacts,
+    });
+
+    console.log("[ANALYZE JOB] runSessionInference returned:", {
+      sessionId: session.id,
+      modelVersion: payload?.modelVersion,
+      metricsCount: Array.isArray(payload?.metrics) ? payload.metrics.length : 0,
+      punchEventsCount: Array.isArray(payload?.punchEvents)
+        ? payload.punchEvents.length
+        : 0,
+      artifacts: payload?.artifacts,
+    });
 
     console.log("[ANALYZE JOB] runSessionInference returned:", {
       sessionId: session.id,

@@ -5,6 +5,7 @@ Called by backend/services/ml-inference.service.js as a subprocess.
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 Supported modes:
   CSV only:   --csv-key <s3-key>
   MOV only:   --mov-key <s3-key>
@@ -15,6 +16,8 @@ Design rule:
   failure should not hide a successful CSV result. In full mode, this script
   returns partial CSV results with a video error message if the video step fails.
 =======
+=======
+>>>>>>> parent of a2d533c (update)
 =======
 >>>>>>> parent of a2d533c (update)
 Example:
@@ -35,6 +38,9 @@ Output contract:
     "artifacts": {}
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> parent of a2d533c (update)
+=======
 >>>>>>> parent of a2d533c (update)
 =======
 >>>>>>> parent of a2d533c (update)
@@ -62,6 +68,7 @@ def parse_args():
         help="S3 key for MOV/MP4 video file",
     )
 <<<<<<< HEAD
+<<<<<<< HEAD
 
     # Video CLI pass-through options
     parser.add_argument("--model", choices=["mediapipe", "yolo"], default="mediapipe")
@@ -77,10 +84,13 @@ def parse_args():
     parser.add_argument("--no-csv", action="store_true")
 =======
 >>>>>>> parent of a2d533c (update)
+=======
+>>>>>>> parent of a2d533c (update)
 
     return parser.parse_args()
 
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 def empty_result() -> dict:
@@ -171,6 +181,16 @@ def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -
 
     if mov_key:
 >>>>>>> parent of a2d533c (update)
+=======
+def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -> dict:
+    result = imu_model.infer(
+        bucket=bucket,
+        region=region,
+        csv_key=csv_key,
+    )
+
+    if mov_key:
+>>>>>>> parent of a2d533c (update)
         video_artifacts = video_model.infer(
             bucket=bucket,
             region=region,
@@ -182,6 +202,9 @@ def run(session_id: str, bucket: str, region: str, csv_key: str, mov_key: str) -
         result.setdefault("artifacts", {})
         result["artifacts"].update(video_artifacts)
 <<<<<<< HEAD
+<<<<<<< HEAD
+>>>>>>> parent of a2d533c (update)
+=======
 >>>>>>> parent of a2d533c (update)
 =======
 >>>>>>> parent of a2d533c (update)
