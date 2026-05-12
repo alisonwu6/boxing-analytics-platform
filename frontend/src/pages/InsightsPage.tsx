@@ -385,7 +385,7 @@ export default function InsightsPage() {
 
   return (
     <PageShell>
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-[1600px] space-y-6">
         <HeaderCard
           session={session}
           hasCsv={hasCsv}
@@ -958,7 +958,7 @@ function VideoAnalysisView({
         </p>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.55fr_1fr]">
         <div className="space-y-4">
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-black shadow-sm">
             <video
@@ -966,7 +966,7 @@ function VideoAnalysisView({
               src={videoUrl}
               controls
               onTimeUpdate={handleTimeUpdate}
-              className="h-auto w-full"
+              className="aspect-video w-full object-contain"
             />
           </div>
 
@@ -1069,10 +1069,9 @@ function VideoPunchTimeline({
   if (!events.length) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900">Punch Matching</h3>
+        <h3 className="text-lg font-bold text-slate-900">Punch Log</h3>
         <p className="mt-2 text-sm text-slate-500">
-          No video punch events were returned. The video can still be watched,
-          but punch-by-punch matching needs videoPunchEvents from the backend.
+          No video punch events were returned.
         </p>
       </div>
     );
@@ -1080,12 +1079,17 @@ function VideoPunchTimeline({
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4">
-        <h3 className="text-lg font-bold text-slate-900">Punch Matching</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Click a punch to jump to that moment in the video. The active punch
-          changes as the video plays.
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900">Punch Log</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Click a punch row to jump to that moment in the video.
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-purple-50 px-4 py-2 text-sm font-bold text-purple-700">
+          {events.length} punches
+        </div>
       </div>
 
       <div className="mb-4 rounded-2xl bg-slate-50 p-4">
@@ -1095,92 +1099,152 @@ function VideoPunchTimeline({
         </p>
       </div>
 
-      <div className="max-h-[680px] space-y-3 overflow-y-auto pr-2">
-        {events.map((event, index) => {
-          const isActive = activeIndex === index;
-          const time = getVideoEventSeekTime(event);
-          const startTime = getVideoEventStartTime(event);
-          const endTime = getVideoEventEndTime(event);
+      <div className="max-h-[680px] overflow-auto rounded-2xl border border-slate-200">
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-slate-100 text-xs uppercase text-slate-500">
+            <tr>
+              <th className="px-3 py-3">#</th>
+              <th className="px-3 py-3">Time (s)</th>
+              <th className="px-3 py-3">Hand</th>
+              <th className="px-3 py-3">Type</th>
+              <th className="px-3 py-3">Force (g)</th>
+              <th className="px-3 py-3">Fwd acc (g)</th>
+              <th className="px-3 py-3">+Peak (ms)</th>
+              <th className="px-3 py-3">Peak- (ms)</th>
+              <th className="px-3 py-3">Speed (px/s)</th>
+              <th className="px-3 py-3">EA load (°)</th>
+              <th className="px-3 py-3">EA drive (°)</th>
+            </tr>
+          </thead>
 
-          return (
-            <button
-              key={index}
-              onClick={() => onPunchClick(index)}
-              className={`w-full rounded-2xl border p-4 text-left transition ${
-                isActive
-                  ? "border-purple-500 bg-purple-50 shadow-sm"
-                  : "border-slate-200 bg-white hover:border-purple-200 hover:bg-slate-50"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-xl text-sm font-bold ${
-                      isActive
-                        ? "bg-purple-600 text-white"
-                        : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
+          <tbody>
+            {events.map((event, index) => {
+              const isActive = activeIndex === index;
+              const time = getVideoEventSeekTime(event);
 
-                  <div>
-                    <p className="font-bold text-slate-900">
-                      {getPunchType(event)}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {formatValue(
-                        event.hand ||
-                          event.punchHand ||
-                          event.punch_hand ||
-                          event.side
-                      )}{" "}
-                      hand
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-sm font-bold text-slate-900">
-                    {time === null ? "N/A" : `${time.toFixed(2)}s`}
-                  </p>
-                  <p className="text-xs text-slate-500">jump to time</p>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">Start</p>
-                  <p className="font-semibold text-slate-700">
-                    {startTime === null ? "N/A" : `${startTime.toFixed(2)}s`}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">End</p>
-                  <p className="font-semibold text-slate-700">
-                    {endTime === null ? "N/A" : `${endTime.toFixed(2)}s`}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">Forward</p>
-                  <p className="font-semibold text-slate-700">
-                    {formatValue(getForwardTime(event))}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-2">
-                  <p className="text-slate-400">Retraction</p>
-                  <p className="font-semibold text-slate-700">
-                    {formatValue(getRetractionTime(event))}
-                  </p>
-                </div>
-              </div>
-            </button>
-          );
-        })}
+              return (
+                <tr
+                  key={index}
+                  onClick={() => onPunchClick(index)}
+                  className={`cursor-pointer border-b border-slate-100 transition ${
+                    isActive
+                      ? "bg-purple-100 text-purple-950"
+                      : "hover:bg-slate-50"
+                  }`}
+                >
+                  <td className="px-3 py-3 font-bold">{index + 1}</td>
+                  <td className="px-3 py-3">{formatValue(time)}</td>
+                  <td className="px-3 py-3 font-semibold">
+                    {formatValue(
+                      event.hand ||
+                        event.punchHand ||
+                        event.punch_hand ||
+                        event.side
+                    )}
+                  </td>
+                  <td className="px-3 py-3">{getPunchType(event)}</td>
+                  <td className="px-3 py-3">{formatValue(getForceG(event))}</td>
+                  <td className="px-3 py-3">{formatValue(getFwdAccG(event))}</td>
+                  <td className="px-3 py-3">{formatValue(getForwardTime(event))}</td>
+                  <td className="px-3 py-3">{formatValue(getRetractionTime(event))}</td>
+                  <td className="px-3 py-3">
+                    {formatValue(
+                      event.speedPx ||
+                        event.speed_px ||
+                        event.speed ||
+                        event.speed_px_s
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    {formatValue(event.elbowLoad || event.ea_load)}
+                  </td>
+                  <td className="px-3 py-3">
+                    {formatValue(event.elbowDrive || event.ea_drive)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+    </div>
+  );
+}
+function SelectedPunchCard({
+  punch,
+  index,
+}: {
+  punch: Record<string, unknown>;
+  index: number;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="text-lg font-bold text-slate-900">
+        Punch #{index + 1}{" "}
+        <span className="text-purple-600">
+          {formatValue(punch.hand)} {getPunchType(punch).toUpperCase()}
+        </span>{" "}
+        <span className="text-sm font-medium text-slate-500">
+          t = {formatValue(getVideoEventSeekTime(punch))}s
+        </span>
+      </h3>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <PunchMetricRow label="Force (IMU)" value={getForceG(punch)} suffix="g" />
+        <PunchMetricRow label="Fwd acc (IMU)" value={getFwdAccG(punch)} suffix="g" />
+        <PunchMetricRow
+          label="Peak speed"
+          value={punch.speedPx || punch.speed_px || punch.speed}
+          suffix="px/s"
+        />
+        <PunchMetricRow
+          label="Forward time"
+          value={getForwardTime(punch)}
+          suffix="ms"
+        />
+        <PunchMetricRow
+          label="Return time"
+          value={getRetractionTime(punch)}
+          suffix="ms"
+        />
+        <PunchMetricRow
+          label="Elbow load"
+          value={punch.elbowLoad || punch.ea_load}
+          suffix="°"
+        />
+        <PunchMetricRow
+          label="Elbow drive"
+          value={punch.elbowDrive || punch.ea_drive}
+          suffix="°"
+        />
+        <PunchMetricRow
+          label="d_sw gain"
+          value={punch.shoulderWristGain || punch.dsw_gain}
+          suffix="px"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PunchMetricRow({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: unknown;
+  suffix?: string;
+}) {
+  const formatted = formatValue(value);
+
+  return (
+    <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="font-bold text-slate-900">
+        {formatted}
+        {formatted !== "N/A" && suffix ? ` ${suffix}` : ""}
+      </span>
     </div>
   );
 }
@@ -1883,6 +1947,28 @@ function buildAccelerationTrendData(events: Record<string, unknown>[]) {
       };
     })
     .filter(Boolean) as { index: number; peakAcceleration: number }[];
+}
+
+function getForceG(event: Record<string, unknown>): number | null {
+  const value =
+    event.forceG ??
+    event.force_g ??
+    event.force ??
+    event.imuForceG ??
+    event.imu_force_g;
+
+  return toNumberOrNull(value);
+}
+
+function getFwdAccG(event: Record<string, unknown>): number | null {
+  const value =
+    event.fwdAccG ??
+    event.fwd_acc_g ??
+    event.forwardAccG ??
+    event.forward_acc_g ??
+    event.fwd_acc;
+
+  return toNumberOrNull(value);
 }
 
 function buildConfidenceTrendData(events: Record<string, unknown>[]) {

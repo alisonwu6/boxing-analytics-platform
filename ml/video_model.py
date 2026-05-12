@@ -233,50 +233,55 @@ def _read_video_punch_events(punch_json_path: Path) -> list:
         return []
 
     punches = data.get("punches", [])
-
     events = []
 
     for item in punches:
-        events.append(
-            {
-                "eventId": item.get("id"),
-                "id": item.get("id"),
+        event = {
+            "eventId": item.get("id"),
+            "id": item.get("id"),
 
-                # main matching time
-                "t": item.get("time_s"),
-                "time": item.get("time_s"),
+            "t": item.get("time_s"),
+            "time": item.get("time_s"),
+            "time_s": item.get("time_s"),
 
-                # video range
-                "startTime": item.get("start_t_s"),
-                "endTime": item.get("end_t_s"),
-                "start_t_s": item.get("start_t_s"),
-                "end_t_s": item.get("end_t_s"),
+            "startTime": item.get("start_t_s"),
+            "endTime": item.get("end_t_s"),
+            "start_t_s": item.get("start_t_s"),
+            "end_t_s": item.get("end_t_s"),
 
-                # punch info
-                "hand": item.get("hand"),
-                "type": item.get("type", "jab"),
+            "hand": item.get("hand"),
+            "type": item.get("type", "jab"),
 
-                # metrics
-                "forwardTimeMs": item.get("fwd_ms"),
-                "retractionTimeMs": item.get("ret_ms"),
-                "fwd_ms": item.get("fwd_ms"),
-                "ret_ms": item.get("ret_ms"),
-                "speedPx": item.get("speed_px"),
-                "speed_px": item.get("speed_px"),
-                "elbowLoad": item.get("ea_load"),
-                "elbowDrive": item.get("ea_drive"),
-                "shoulderWristGain": item.get("dsw_gain"),
+            "forceG": item.get("force_g") or item.get("force") or item.get("imu_force_g"),
+            "fwdAccG": item.get("fwd_acc_g") or item.get("fwd_acc") or item.get("forward_acc_g"),
 
-                # frame info
-                "peakFrame": item.get("peak_fi"),
-                "startFrame": item.get("start_fi"),
-                "endFrame": item.get("end_fi"),
-            }
-        )
+            "forwardTimeMs": item.get("fwd_ms"),
+            "retractionTimeMs": item.get("ret_ms"),
+            "fwd_ms": item.get("fwd_ms"),
+            "ret_ms": item.get("ret_ms"),
+
+            "speedPx": item.get("speed_px"),
+            "speed_px": item.get("speed_px"),
+
+            "elbowLoad": item.get("ea_load"),
+            "elbowDrive": item.get("ea_drive"),
+            "ea_load": item.get("ea_load"),
+            "ea_drive": item.get("ea_drive"),
+
+            "shoulderWristGain": item.get("dsw_gain"),
+            "dsw_gain": item.get("dsw_gain"),
+
+            "peakFrame": item.get("peak_fi"),
+            "startFrame": item.get("start_fi"),
+            "endFrame": item.get("end_fi"),
+        }
+
+        # keep original fields too, so frontend can still access anything extra
+        event.update(item)
+        events.append(event)
 
     print(f"[VideoModel] Loaded {len(events)} video punch events", file=sys.stderr)
     return events
-
 
 def infer(
     bucket: str,
