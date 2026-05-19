@@ -53,5 +53,5 @@ def save_tracking_csv(out_stem, fps, n_frames,
             ]
             w.writerow(row)
 
-    print(f"Tracking CSV → {csv_path}")
+    print(f"Saved tracking CSV: {csv_path}")
     return csv_path

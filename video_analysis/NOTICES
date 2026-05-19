@@ -1,0 +1,61 @@
+Third-Party Notices
+===================
+
+This software uses the following open source packages.
+
+
+dash
+----
+License: MIT
+Copyright (c) 2016-2024 Plotly, Inc.
+https://github.com/plotly/dash
+
+
+Flask
+-----
+License: BSD-3-Clause
+Copyright (c) 2010 Pallets
+https://github.com/pallets/flask
+
+
+NumPy
+-----
+License: BSD-3-Clause
+Copyright (c) 2005-2024 NumPy Developers
+https://numpy.org
+
+
+opencv-python
+-------------
+License: Apache 2.0
+Copyright (c) 2016-2024 OpenCV team
+https://github.com/opencv/opencv-python
+
+
+pandas
+------
+License: BSD-3-Clause
+Copyright (c) 2008-2024 AQR Capital Management, LLC, Lambda Foundry, Inc.,
+PyData Development Team, and open source contributors
+https://pandas.pydata.org
+
+
+SciPy
+-----
+License: BSD-3-Clause
+Copyright (c) 2001-2024 Enthought, Inc. and SciPy Developers
+https://scipy.org
+
+
+openpyxl
+--------
+License: MIT
+Copyright (c) 2010 openpyxl contributors
+https://openpyxl.readthedocs.io
+
+
+MediaPipe
+---------
+License: Apache 2.0
+Copyright (c) 2019-2024 Google LLC
+https://github.com/google-ai-edge/mediapipe
