@@ -3,7 +3,6 @@ backend/node_modules
 backend/uploads
 backend/.env
 backend/test-data
-ml/models
 ml/__pycache__
 **/__pycache__
 **/*.pyc

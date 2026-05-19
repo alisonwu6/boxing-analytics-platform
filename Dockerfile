@@ -13,22 +13,26 @@ urllib.request.urlretrieve( \
   '/tmp/pose_landmarker_heavy.task' \
 )"
 
-# Stage 2: Final image (Node.js + Python 3.11)
-FROM node:20-slim
+# Stage 2: Final image (Python 3.11 base + Node.js 20)
+# Using python:3.11-slim as base avoids GLIBC version mismatch when copying
+# libpython3.11.so from stage 1 into a node:20-slim image.
+FROM python:3.11-slim
 
-# python3 runtime + ffmpeg (video re-encoding) + opencv system libs (libgl1/libglib2.0-0)
+# Node.js 20 + ffmpeg + opencv system libs
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-distutils \
+    curl \
+    ca-certificates \
     ffmpeg \
     libgl1 \
+    libgles2 \
+    libegl1 \
     libglib2.0-0 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python 3.11 interpreter and installed packages from stage 1
-COPY --from=python-deps /usr/local/lib/python3.11 /usr/local/lib/python3.11
-COPY --from=python-deps /usr/local/bin/python3.11  /usr/local/bin/python3.11
-RUN ln -sf /usr/local/bin/python3.11 /usr/local/bin/python3
+# Copy pip-installed packages from stage 1
+COPY --from=python-deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 
 WORKDIR /app
 
