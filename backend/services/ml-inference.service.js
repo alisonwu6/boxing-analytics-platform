@@ -13,7 +13,7 @@ function getProjectRoot() {
 }
 
 function resolvePythonBin() {
-  return process.env.PYTHON_BIN || "python";
+  return process.env.PYTHON_BIN || "python3";
 }
 
 function resolveInferenceScriptPath() {
