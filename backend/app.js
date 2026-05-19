@@ -6,7 +6,8 @@ const cors = require("cors");
 
 const app = express();
 
-app.use(cors({ origin: "http://localhost:5173" }));
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173").split(",");
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use((req, res, next) => {
   console.log(`[REQ] ${req.method} ${req.originalUrl}`);
@@ -21,5 +22,10 @@ app.get('/health', (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use(sessionsRoutes);
+
+app.use((err, req, res, next) => {
+  console.error('[ERROR]', err.message, err.stack);
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+});
 
 module.exports = app;

@@ -25,6 +25,9 @@ async function register (req, res) {
       createdAt: user.createdAt,
     });
   } catch (error) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'Email already in use.' });
+    }
     console.error(error);
     res.status(500).json({ error: 'Failed to register user' });
   }
@@ -39,13 +42,13 @@ async function login (req, res) {
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+      return res.status(401).json({ error: 'Email or password is incorrect.' });
     }
 
     const valid = await verifyPassword(password, user.passwordHash);
 
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid password' });
+      return res.status(401).json({ error: 'Email or password is incorrect.' });
     }
 
     const token = signToken(user);
