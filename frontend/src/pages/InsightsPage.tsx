@@ -1170,7 +1170,7 @@ function VideoPunchTimeline({
     </div>
   );
 }
-function SelectedPunchCard({
+export function SelectedPunchCard({
   punch,
   index,
 }: {
