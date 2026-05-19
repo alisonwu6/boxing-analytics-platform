@@ -1,19 +1,21 @@
 const path = require("path");
 const dotenv = require("dotenv");
 
-// Always load backend/.env first, before importing app/routes/services
-const envPath = path.resolve(__dirname, ".env");
+// Load mode-specific env first (.env.development / .env.production), then fall back to .env
+const mode = process.env.NODE_ENV || "development";
+const modeEnvPath = path.resolve(__dirname, `.env.${mode}`);
+const defaultEnvPath = path.resolve(__dirname, ".env");
 
-const envResult = dotenv.config({
-  path: envPath,
-  override: true,
-});
-
-if (envResult.error) {
-  console.warn("[ENV WARNING] Could not load .env file:", envResult.error.message);
+const modeResult = dotenv.config({ path: modeEnvPath, override: true });
+if (!modeResult.error) {
+  console.log(`[ENV] Loaded .env.${mode} (${Object.keys(modeResult.parsed || {}).length} vars)`);
 } else {
-  console.log("[ENV] Loaded .env from:", envPath);
-  console.log("[ENV] Variables loaded:", Object.keys(envResult.parsed || {}).length);
+  const fallback = dotenv.config({ path: defaultEnvPath, override: true });
+  if (fallback.error) {
+    console.warn("[ENV WARNING] Could not load .env file:", fallback.error.message);
+  } else {
+    console.log(`[ENV] Loaded .env (${Object.keys(fallback.parsed || {}).length} vars)`);
+  }
 }
 
 console.log("[ENV CHECK]", {

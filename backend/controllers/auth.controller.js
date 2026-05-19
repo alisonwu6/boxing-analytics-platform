@@ -42,13 +42,13 @@ async function login (req, res) {
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+      return res.status(401).json({ error: 'Email or password is incorrect.' });
     }
 
     const valid = await verifyPassword(password, user.passwordHash);
 
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid password' });
+      return res.status(401).json({ error: 'Email or password is incorrect.' });
     }
 
     const token = signToken(user);
