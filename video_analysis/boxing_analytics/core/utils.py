@@ -1,4 +1,4 @@
-"""Shared signal-processing utilities (no external dependencies beyond numpy)."""
+# shared signal processing utilities, only needs numpy
 
 from typing import List, Tuple
 
@@ -6,7 +6,6 @@ import numpy as np
 
 
 def gaussian_smooth(x: np.ndarray, sigma: float = 4.0) -> np.ndarray:
-    """Apply Gaussian smoothing to a 1-D array."""
     if sigma <= 0:
         return x.copy()
     hw = int(4 * sigma)
@@ -28,7 +27,6 @@ def find_peaks_simple(
     min_prominence: float = 0.0,
     min_distance_samples: int = 1,
 ) -> np.ndarray:
-    """Find local maxima with prominence and distance constraints."""
     n = len(x)
     raw = [i for i in range(1, n - 1) if x[i] > x[i - 1] and x[i] > x[i + 1]]
     peaks: List[int] = []
@@ -49,7 +47,6 @@ def cross_correlate_offset(
     fs: float = 30.0,
     search_s: Tuple[float, float] = (-20.0, 20.0),
 ) -> float:
-    """Return lag (s) that maximises cross-correlation: qry_real = qry - lag."""
     dt = 1.0 / fs
     t0 = min(t_ref[0], t_qry[0])
     t1 = max(t_ref[-1], t_qry[-1])

@@ -64,38 +64,64 @@ def export_excel(out_stem, fps, n_frames,
     auto_width(ws1)
     ws1.freeze_panes = "A2"
 
-    # sheet 2: confirmed jabs
-    ws2 = wb.create_sheet("Detected_Jabs")
-    hdrs2 = ["hand", "punch#",
-             "start_fi", "start_t_s",
-             "peak_fi", "peak_t_s",
-             "end_fi", "end_t_s",
-             "ea_min_deg", "ea_peak_deg", "ea_max_drive_deg",
-             "dsw_start_px", "dsw_peak_px", "dsw_gain_px",
-             "peak_speed_px_s", "dur_s"]
-    style_header(ws2, hdrs2)
-    for p in punches:
-        ws2.append([
-            p["hand"], p["punch"],
-            p["start_fi"], round(p["start_fi"] / fps, 3),
-            p["peak_fi"],  round(p["peak_fi"]  / fps, 3),
-            p["end_fi"],   round(p["end_fi"]   / fps, 3),
-            p["ea_min"], p["ea_peak"], p.get("ea_max_drive", "-"),
-            p["dsw_start"], p["dsw_peak"], p["dsw_gain"],
-            p["peak_speed"], p["dur_s"],
-        ])
+    # sheet 2: confirmed punches (jab or uppercut)
+    ptype = punches[0].get("type", "jab") if punches else "jab"
+    sheet_name = "Detected_Uppercuts" if ptype == "uppercut" else "Detected_Jabs"
+    ws2 = wb.create_sheet(sheet_name)
+    if ptype == "uppercut":
+        hdrs2 = ["hand", "punch#",
+                 "start_fi", "start_t_s",
+                 "load_fi",  "load_t_s",
+                 "peak_fi",  "peak_t_s",
+                 "end_fi",   "end_t_s",
+                 "load_min_wa", "peak_wa",
+                 "peak_ea_deg", "peak_vy_px_s",
+                 "peak_speed_px_s", "dur_s"]
+        style_header(ws2, hdrs2)
+        for p in punches:
+            ws2.append([
+                p["hand"], p["punch"],
+                p["start_fi"], round(p["start_fi"] / fps, 3),
+                p["load_fi"],  round(p["load_fi"]  / fps, 3),
+                p["peak_fi"],  round(p["peak_fi"]  / fps, 3),
+                p["end_fi"],   round(p["end_fi"]   / fps, 3),
+                p["load_min_wa"], p["peak_wa"],
+                p["peak_ea"], p["peak_vy"],
+                p["peak_speed"], p["dur_s"],
+            ])
+    else:
+        hdrs2 = ["hand", "punch#",
+                 "start_fi", "start_t_s",
+                 "peak_fi",  "peak_t_s",
+                 "end_fi",   "end_t_s",
+                 "ea_min_deg", "ea_peak_deg", "ea_max_drive_deg",
+                 "dsw_start_px", "dsw_peak_px", "dsw_gain_px",
+                 "peak_speed_px_s", "dur_s"]
+        style_header(ws2, hdrs2)
+        for p in punches:
+            ws2.append([
+                p["hand"], p["punch"],
+                p["start_fi"], round(p["start_fi"] / fps, 3),
+                p["peak_fi"],  round(p["peak_fi"]  / fps, 3),
+                p["end_fi"],   round(p["end_fi"]   / fps, 3),
+                p["ea_min"], p["ea_peak"], p.get("ea_max_drive", "-"),
+                p["dsw_start"], p["dsw_peak"], p["dsw_gain"],
+                p["peak_speed"], p["dur_s"],
+            ])
     auto_width(ws2)
 
     # sheet 3: rejected peaks
     ws3 = wb.create_sheet("Rejected_Peaks")
     hdrs3 = ["hand", "peak_fi", "peak_t_s", "reason",
-             "speed_px_s", "dsw_px", "ea_deg"]
+             "speed_px_s", "dsw_or_vy", "ea_or_wa"]
     style_header(ws3, hdrs3)
     for r in rejected_peaks:
         ws3.append([r["hand"], r["peak_fi"], r["peak_t"],
-                    r["reason"], r["sp"], r["dsw"], r["ea"]])
+                    r["reason"], r["sp"],
+                    r.get("dsw", r.get("vy", "-")),
+                    r.get("ea",  r.get("wa",  "-"))])
     auto_width(ws3)
 
     wb.save(xl_path)
-    print(f"Excel → {xl_path}")
+    print(f"Saved Excel: {xl_path}")
     return xl_path

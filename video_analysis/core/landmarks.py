@@ -12,16 +12,10 @@ try:
 except ImportError:
     HAS_MEDIAPIPE = False
 
-try:
-    from ultralytics import YOLO as _YOLO
-    HAS_YOLO = True
-except ImportError:
-    HAS_YOLO = False
-
 # COCO joint indices we care about (shoulder through ankle)
 DRAW_JOINTS = list(range(5, 17))
 
-# MediaPipe landmark index → COCO index
+# MediaPipe landmark index to COCO index
 _MP_TO_COCO = {11:5, 12:6, 13:7, 14:8, 15:9, 16:10,
                23:11, 24:12, 25:13, 26:14, 27:15, 28:16}
 
@@ -41,9 +35,6 @@ REACQ_CONFIRM        = 8
 REACQ_CONFIRM_FAST   = 4
 WRIST_ACTIVITY_THR   = 12.0
 MAX_JUMP_PX          = 200
-
-YOLO_MODEL = "yolov8x-pose.pt"
-
 
 def _find_mp_model():
     candidates = [
@@ -105,12 +96,12 @@ def _apply_jump_filter(raw_jx, raw_jy, max_jump=MAX_JUMP_PX):
                     xs[k] = np.nan; ys[k] = np.nan
 
 
-def extract_mediapipe(video_path, fps, H, W, duration_s=None, model_path=None):
+def extract_mediapipe(video_path, fps, H, W, duration_s=None, start_s=0.0, model_path=None):
     if not HAS_MEDIAPIPE:
         raise RuntimeError("mediapipe not installed")
 
     mp_model = model_path or _find_mp_model()
-    print("Pass 1 — MediaPipe PoseLandmarker (Heavy) — CALIBRATING → TRACKING → OCCLUDED…")
+    print("Pass 1 - MediaPipe PoseLandmarker (Heavy), states: CALIBRATING / TRACKING / OCCLUDED")
 
     base_opts = mp_tasks.BaseOptions(model_asset_path=mp_model)
     options   = mp_vision.PoseLandmarkerOptions(
@@ -124,6 +115,10 @@ def extract_mediapipe(video_path, fps, H, W, duration_s=None, model_path=None):
     lander = mp_vision.PoseLandmarker.create_from_options(options)
     cap    = cv2.VideoCapture(video_path)
     total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    start_frame = int(start_s * fps)
+    if start_frame > 0:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        total = max(0, total - start_frame)
     if duration_s is not None:
         total = min(total, int(duration_s * fps))
 
@@ -148,7 +143,7 @@ def extract_mediapipe(video_path, fps, H, W, duration_s=None, model_path=None):
         img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         res = lander.detect_for_video(img, int(fidx * 1000 / fps))
 
-        lm     = _select_boxer_mp(res.pose_landmarks, last_jack, W, H)
+        lm = _select_boxer_mp(res.pose_landmarks, last_jack, W, H)
         accept = True
 
         if lm is not None:
@@ -165,7 +160,7 @@ def extract_mediapipe(video_path, fps, H, W, duration_s=None, model_path=None):
                     shw_ref   = float(np.median(sws)) if sws else None
                     last_jack = torso_ref
                     state     = "TRACKING"
-                    print(f"  Boxer calibrated → torso ({torso_ref[0]:.0f},{torso_ref[1]:.0f})"
+                    print(f"  Boxer calibrated, torso at ({torso_ref[0]:.0f},{torso_ref[1]:.0f})"
                           f"  shw={shw_ref:.0f}px")
 
             elif torso is not None:
@@ -235,80 +230,10 @@ def extract_mediapipe(video_path, fps, H, W, duration_s=None, model_path=None):
 
     cap.release(); lander.close()
     _apply_jump_filter(raw_jx, raw_jy)
-    print(f"  Done — {fidx} frames.")
+    print(f"  Done. {fidx} frames processed.")
     return raw_jx, raw_jy, fidx
 
 
-def extract_yolo(video_path, fps, H, W, duration_s=None):
-    if not HAS_YOLO:
-        raise RuntimeError("ultralytics not installed — pip install ultralytics")
-    print("Pass 1 — YOLOv8x-pose with person tracking…")
-    model = _YOLO(YOLO_MODEL)
-    cap   = cv2.VideoCapture(video_path)
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    if duration_s is not None:
-        total = min(total, int(duration_s * fps))
-
-    raw_jx = {j: np.full(total, np.nan) for j in DRAW_JOINTS}
-    raw_jy = {j: np.full(total, np.nan) for j in DRAW_JOINTS}
-    target_id = None; last_center = None
-
-    fidx = 0
-    while fidx < total:
-        ok, frame = cap.read()
-        if not ok: break
-        res = model.track(frame, persist=True, verbose=False, conf=0.25)[0]
-        if res.keypoints is None or len(res.keypoints.xy) == 0:
-            fidx += 1; continue
-
-        n_det = len(res.keypoints.xy)
-        boxes = res.boxes.xyxy.cpu().numpy()
-        ids   = res.boxes.id.cpu().numpy().astype(int) \
-                if res.boxes.id is not None else np.arange(n_det)
-
-        if target_id is None:
-            # person facing camera has the most confident keypoints
-            kp_confs = res.keypoints.conf.cpu().numpy()
-            avg_conf = kp_confs.mean(axis=1)
-            best = int(np.argmax(avg_conf))
-            cx = (boxes[best][0]+boxes[best][2])/2
-            cy = (boxes[best][1]+boxes[best][3])/2
-            target_id   = ids[best]
-            last_center = (cx, cy)
-            print(f"  Locked onto track ID {target_id} (conf={avg_conf[best]:.3f}, center=({cx:.0f},{cy:.0f}))")
-        else:
-            match = np.where(ids == target_id)[0]
-            if len(match):
-                best = int(match[0])
-            else:
-                centers = [((b[0]+b[2])/2,(b[1]+b[3])/2) for b in boxes]
-                best = int(np.argmin([(c[0]-last_center[0])**2 +
-                                      (c[1]-last_center[1])**2 for c in centers]))
-                target_id = ids[best]
-            last_center = ((boxes[best][0]+boxes[best][2])/2,
-                           (boxes[best][1]+boxes[best][3])/2)
-
-        kpts  = res.keypoints.xy[best].cpu().numpy()
-        confs = res.keypoints.conf[best].cpu().numpy()
-        for j in DRAW_JOINTS:
-            if confs[j] >= 0.30 and kpts[j][0] > 0:
-                raw_jx[j][fidx] = kpts[j][0]
-                raw_jy[j][fidx] = kpts[j][1]
-
-        fidx += 1
-        if fidx % 300 == 0:
-            print(f"  frame {fidx}/{total}  t={fidx/fps:.1f}s")
-
-    cap.release()
-    print(f"  Done — {fidx} frames.")
-    return raw_jx, raw_jy, fidx
-
-
-def extract_landmarks(video_path, fps, H, W, model="mediapipe",
-                      duration_s=None, model_path=None):
-    if model == "mediapipe":
-        return extract_mediapipe(video_path, fps, H, W, duration_s, model_path)
-    elif model == "yolo":
-        return extract_yolo(video_path, fps, H, W, duration_s)
-    else:
-        raise ValueError(f"unknown model '{model}' — use mediapipe or yolo")
+def extract_landmarks(video_path, fps, H, W,
+                      duration_s=None, start_s=0.0, model_path=None, **_):
+    return extract_mediapipe(video_path, fps, H, W, duration_s, start_s, model_path)

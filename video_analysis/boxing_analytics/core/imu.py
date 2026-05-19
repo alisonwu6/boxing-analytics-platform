@@ -1,4 +1,4 @@
-"""IMU data loading and preprocessing."""
+# IMU data loading and preprocessing
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,23 +26,19 @@ class IMUData:
     dropout_mask:     np.ndarray   # True = suspect sample
     lin_acc_x:        np.ndarray = None   # linear accel X (gravity removed)
     lin_acc_z:        np.ndarray = None   # linear accel Z (gravity removed)
-    lin_acc_magnitude: np.ndarray = None  # smoothed |LinAccXYZ| — for punch detection
+    lin_acc_magnitude: np.ndarray = None  # smoothed |LinAccXYZ| used for punch detection
     fs:               float = 200.0
 
 
 class IMUProcessor:
-    """
-    Loads IMU data from .xlsx or .csv.
-
-    Expected columns (auto-detected by header name or by position):
-      TimeStamp(s), AccX(g), AccY(g), AccZ(g),
-      GyroX, GyroY, GyroZ, [LinAccX, LinAccY, LinAccZ]
-    """
+    # loads IMU data from .xlsx or .csv
+    # expected columns (detected by header name or position):
+    # TimeStamp(s), AccX(g), AccY(g), AccZ(g), GyroX, GyroY, GyroZ, [LinAccX, LinAccY, LinAccZ]
 
     def load(self, path: str, label: str) -> IMUData:
         path = str(path)
         ext  = Path(path).suffix.lower()
-        print(f"[IMUProcessor] Loading {label} ← {Path(path).name} …")
+        print(f"[IMUProcessor] Loading {label} from {Path(path).name}")
 
         if ext in (".xlsx", ".xlsm", ".xls"):
             data, headers = self._load_excel(path)
@@ -74,12 +70,12 @@ class IMUProcessor:
                 drop[i - win:i + win] = True
 
         sid = int(data[0, 0]) if data.shape[1] > 1 and not np.isnan(data[0, 0]) else -1
-        print(f"  → {len(data)} samples  t=[{ts[0]:.2f}–{ts[-1]:.2f}s]  "
+        print(f"  {len(data)} samples  t=[{ts[0]:.2f}-{ts[-1]:.2f}s]  "
               f"SensorId={sid}  dropouts={drop.sum()/len(drop)*100:.1f}%")
 
         has_lin = "lax" in col or "laz" in col or "lay" in col
         if has_lin:
-            print(f"  → Linear accel loaded (X/Y/Z)")
+            print(f"  Linear accel loaded (X/Y/Z)")
 
         return IMUData(
             label=label, sensor_id=sid,
@@ -109,7 +105,7 @@ class IMUProcessor:
         return data, headers
 
     def _load_excel_strict_xml(self, path: str):
-        """Parse strict OOXML .xlsx files via zipfile + ElementTree."""
+        # fallback for strict OOXML .xlsx files that openpyxl can't read directly
         import zipfile
         import xml.etree.ElementTree as ET
 
@@ -130,7 +126,7 @@ class IMUProcessor:
                     if t is not None:
                         shared.append(t.text or "")
                     else:
-                        # rich text — join all <t> elements
+                        # rich text cell - join all <t> elements
                         parts = [e.text or "" for e in si.iter(f"{{{ns}}}t")]
                         shared.append("".join(parts))
 
@@ -180,7 +176,7 @@ class IMUProcessor:
         return data, headers
 
     def _map_columns(self, headers: List[str]) -> Dict[str, int]:
-        """Map known column names → indices. Falls back to positional."""
+        # maps known column names to their index, falls back to position if not found
         h = [x.lower() for x in headers]
 
         def find(*keys):
